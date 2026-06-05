@@ -32,7 +32,16 @@ class ArtifactService:
         report_markdown = _read_text_if_exists(answer_path)
         artifacts = _collect_optional_artifacts(run_paths.output_dir)
 
-        if runner_result.timed_out:
+        if runner_result.capacity_exceeded:
+            envelope = ToolEnvelope(
+                status=ToolStatus.CAPACITY_EXCEEDED,
+                run_id=run_paths.run_id,
+                report_markdown=report_markdown,
+                artifact_paths=_string_paths(artifacts),
+                citation_summary=[],
+                error=runner_result.stderr or "Worker capacity exceeded.",
+            )
+        elif runner_result.timed_out:
             envelope = ToolEnvelope(
                 status=ToolStatus.TIMEOUT,
                 run_id=run_paths.run_id,
@@ -158,10 +167,12 @@ def _write_manifest(
         "tool_name": tool_name.value,
         "status": envelope.status.value,
         "sources": [source.path for source in sources],
+        "source_bytes": {source.path: source.size_bytes for source in sources},
         "artifacts": envelope.artifact_paths,
         "citation_summary": envelope.citation_summary,
         "runner_exit_code": runner_result.exit_code,
         "runner_timed_out": runner_result.timed_out,
+        "runner_capacity_exceeded": runner_result.capacity_exceeded,
         "started_at": started_at.isoformat(),
         "finished_at": finished_at.isoformat(),
     }
@@ -176,4 +187,3 @@ def _write_manifest(
 
     manifest_path = run_paths.output_dir / MANIFEST_FILENAME
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
-

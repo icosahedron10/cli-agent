@@ -54,6 +54,21 @@ def _render_tool_payload(payload: dict) -> None:
             _render_artifact(Path(artifact_path))
 
 
+def _messages_with_failed_turn(
+    history: list[dict],
+    user_content: str,
+    error: Exception,
+) -> list[dict]:
+    return [
+        *history,
+        {"role": "user", "content": user_content},
+        {
+            "role": "assistant",
+            "content": f"Backend error before the turn completed: {error}",
+        },
+    ]
+
+
 st.set_page_config(page_title="DCI Tool POC", layout="wide")
 st.title("DCI Search and Auto Analysis POC")
 
@@ -88,6 +103,11 @@ prompt = st.chat_input("Ask a source-backed question")
 if prompt:
     with st.chat_message("user"):
         st.markdown(prompt)
-    result = controller.handle_user_turn(st.session_state.messages, prompt)
-    st.session_state.messages = result.messages
-    st.rerun()
+    try:
+        result = controller.handle_user_turn(st.session_state.messages, prompt)
+    except Exception as exc:
+        st.session_state.messages = _messages_with_failed_turn(st.session_state.messages, prompt, exc)
+        st.error(f"Backend error before the turn completed: {exc}")
+    else:
+        st.session_state.messages = result.messages
+        st.rerun()

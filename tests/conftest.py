@@ -44,8 +44,14 @@ def app_config(tmp_path: Path) -> AppConfig:
         chat_api_key="test-key",
         chat_model="test-model",
         chat_temperature=0.0,
+        chat_timeout_seconds=120.0,
         worker_image="dci-copilot-worker:test",
         worker_timeout_seconds=30,
+        worker_queue_timeout_seconds=30.0,
+        max_concurrent_worker_runs=2,
+        max_sources_per_run=4,
+        max_source_bytes=32 * 1024 * 1024,
+        max_total_source_bytes_per_run=64 * 1024 * 1024,
         copilot_provider_base_url="http://host.docker.internal:11434",
         copilot_model="test-copilot-model",
         copilot_provider_api_key=None,
@@ -56,5 +62,4 @@ def app_config(tmp_path: Path) -> AppConfig:
 
 def with_config_path(config: AppConfig, path: Path) -> AppConfig:
     return replace(config, approved_sources_path=path)
-
 
