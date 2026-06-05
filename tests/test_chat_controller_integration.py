@@ -1,47 +1,47 @@
 from __future__ import annotations
 
-from dci_poc.agents.chat_agent import ChatCompletionAgent
-from dci_poc.constants import API_TOOL_AUTO_ANALYSIS, API_TOOL_DCI_SEARCH
-from dci_poc.controllers.chat_controller import ChatController, visible_messages
-from dci_poc.managers.tool_manager import ToolManager
-from dci_poc.schemas import build_tool_schemas
-from dci_poc.services.approved_sources import ApprovedSourceService
-from dci_poc.services.artifact_service import ArtifactService
-from dci_poc.services.prompt_service import WorkerPromptService
-from dci_poc.services.run_folder_service import RunFolderService
+from cli_agent.agents.chat_agent import ChatCompletionAgent
+from cli_agent.constants import API_TOOL_AUTO_ANALYSIS, API_TOOL_SOURCE_SEARCH
+from cli_agent.controllers.chat_controller import ChatController, visible_messages
+from cli_agent.managers.tool_manager import ToolManager
+from cli_agent.schemas import build_tool_schemas
+from cli_agent.services.approved_sources import ApprovedSourceService
+from cli_agent.services.artifact_service import ArtifactService
+from cli_agent.services.prompt_service import WorkerPromptService
+from cli_agent.services.run_folder_service import RunFolderService
 from fakes import FakeChatClient, FakeRunner
 from helpers import tool_call
 
 
-def build_controller(app_config, fake_client: FakeChatClient, fake_runner: FakeRunner) -> ChatController:
-    approved_sources = ApprovedSourceService(app_config)
+def build_controller(app_settings, fake_client: FakeChatClient, fake_runner: FakeRunner) -> ChatController:
+    approved_sources = ApprovedSourceService(app_settings)
     manager = ToolManager(
         approved_sources=approved_sources,
-        run_folders=RunFolderService(app_config),
+        run_folders=RunFolderService(app_settings),
         prompt_service=WorkerPromptService(),
         runner=fake_runner,  # type: ignore[arg-type]
         artifact_service=ArtifactService(),
     )
-    agent = ChatCompletionAgent(app_config, fake_client)
+    agent = ChatCompletionAgent(app_settings, fake_client)
     return ChatController(agent, manager, build_tool_schemas(approved_sources.approved_paths()))
 
 
-def test_controller_rejects_multiple_tool_calls_without_running_worker(app_config) -> None:
+def test_controller_rejects_multiple_tool_calls_without_running_worker(app_settings) -> None:
     fake_client = FakeChatClient(
         [
             {
                 "role": "assistant",
                 "content": None,
                 "tool_calls": [
-                    tool_call(API_TOOL_DCI_SEARCH, {"question": "A", "source_paths": ["sample_sources/dnd5e_hp_reference.md"]}, "call_1"),
-                    tool_call(API_TOOL_DCI_SEARCH, {"question": "B", "source_paths": ["sample_sources/dnd5e_hp_reference.md"]}, "call_2"),
+                    tool_call(API_TOOL_SOURCE_SEARCH, {"question": "A", "source_paths": ["sample_sources/dnd5e_hp_reference.md"]}, "call_1"),
+                    tool_call(API_TOOL_SOURCE_SEARCH, {"question": "B", "source_paths": ["sample_sources/dnd5e_hp_reference.md"]}, "call_2"),
                 ],
             },
             {"role": "assistant", "content": "I can run only one tool call per turn."},
         ]
     )
     runner = FakeRunner("success")
-    controller = build_controller(app_config, fake_client, runner)
+    controller = build_controller(app_settings, fake_client, runner)
 
     result = controller.handle_user_turn([], "Find A and B.")
 
@@ -53,7 +53,7 @@ def test_controller_rejects_multiple_tool_calls_without_running_worker(app_confi
     assert fake_client.payloads[0]["parallel_tool_calls"] is False
 
 
-def test_streamlit_chat_loop_with_fake_completions_clarifies_then_runs(app_config) -> None:
+def test_streamlit_chat_loop_with_fake_completions_clarifies_then_runs(app_settings) -> None:
     fake_client = FakeChatClient(
         [
             {
@@ -80,7 +80,7 @@ def test_streamlit_chat_loop_with_fake_completions_clarifies_then_runs(app_confi
         ]
     )
     runner = FakeRunner("auto_analysis_success", answer="Final: 91 HP (dnd5e_hp_reference.md: Section Paladin).")
-    controller = build_controller(app_config, fake_client, runner)
+    controller = build_controller(app_settings, fake_client, runner)
 
     first = controller.handle_user_turn([], "Calculate HP for a level 11 dwarf paladin with 17 constitution.")
     second = controller.handle_user_turn(

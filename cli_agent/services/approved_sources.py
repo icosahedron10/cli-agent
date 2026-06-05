@@ -4,14 +4,14 @@ import json
 from pathlib import Path
 from typing import Any
 
-from dci_poc.exceptions import ApprovedSourceError
-from dci_poc.models import AppConfig, SourceEntry
+from cli_agent.exceptions import ApprovedSourceError
+from cli_agent.models import AppSettings, SourceEntry
 
 
 class ApprovedSourceService:
-    def __init__(self, config: AppConfig) -> None:
-        self._config = config
-        self._sources_by_path = _load_sources(config)
+    def __init__(self, settings: AppSettings) -> None:
+        self._settings = settings
+        self._sources_by_path = _load_sources(settings)
 
     def approved_paths(self) -> list[str]:
         return list(self._sources_by_path.keys())
@@ -36,16 +36,16 @@ class ApprovedSourceService:
             entries.append(entry)
             seen.add(path)
 
-        _validate_source_limits(entries, self._config)
+        _validate_source_limits(entries, self._settings)
         return entries
 
 
-def _load_sources(config: AppConfig) -> dict[str, SourceEntry]:
-    if not config.approved_sources_path.exists():
-        raise ApprovedSourceError(f"Approved sources file does not exist: {config.approved_sources_path}")
+def _load_sources(settings: AppSettings) -> dict[str, SourceEntry]:
+    if not settings.approved_sources_path.exists():
+        raise ApprovedSourceError(f"Approved sources file does not exist: {settings.approved_sources_path}")
 
     try:
-        raw = json.loads(config.approved_sources_path.read_text(encoding="utf-8"))
+        raw = json.loads(settings.approved_sources_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise ApprovedSourceError("Approved sources file must be valid JSON") from exc
 
@@ -55,7 +55,7 @@ def _load_sources(config: AppConfig) -> dict[str, SourceEntry]:
 
     loaded: dict[str, SourceEntry] = {}
     for index, item in enumerate(sources):
-        entry = _parse_source_entry(config.repo_root, item, index)
+        entry = _parse_source_entry(settings.repo_root, item, index)
         if entry.path in loaded:
             raise ApprovedSourceError(f"Duplicate approved source path: {entry.path}")
         loaded[entry.path] = entry
@@ -96,25 +96,25 @@ def _parse_source_entry(repo_root: Path, item: Any, index: int) -> SourceEntry:
     )
 
 
-def _validate_source_limits(entries: list[SourceEntry], config: AppConfig) -> None:
-    if len(entries) > config.max_sources_per_run:
+def _validate_source_limits(entries: list[SourceEntry], settings: AppSettings) -> None:
+    if len(entries) > settings.max_sources_per_run:
         raise ApprovedSourceError(
-            f"Requested {len(entries)} sources; maximum per run is {config.max_sources_per_run}."
+            f"Requested {len(entries)} sources; maximum per run is {settings.max_sources_per_run}."
         )
 
-    oversized = [entry for entry in entries if entry.size_bytes > config.max_source_bytes]
+    oversized = [entry for entry in entries if entry.size_bytes > settings.max_source_bytes]
     if oversized:
         entry = oversized[0]
         raise ApprovedSourceError(
             f"Requested source is too large: {entry.path} is {_format_bytes(entry.size_bytes)}; "
-            f"limit is {_format_bytes(config.max_source_bytes)}."
+            f"limit is {_format_bytes(settings.max_source_bytes)}."
         )
 
     total_size = sum(entry.size_bytes for entry in entries)
-    if total_size > config.max_total_source_bytes_per_run:
+    if total_size > settings.max_total_source_bytes_per_run:
         raise ApprovedSourceError(
             f"Requested sources total {_format_bytes(total_size)}; "
-            f"limit is {_format_bytes(config.max_total_source_bytes_per_run)}."
+            f"limit is {_format_bytes(settings.max_total_source_bytes_per_run)}."
         )
 
 

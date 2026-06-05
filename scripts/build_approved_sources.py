@@ -7,7 +7,7 @@ from typing import Sequence
 
 
 DEFAULT_CORPUS_DIR = Path("5e PHB") / "chapters"
-DEFAULT_OUTPUT_PATH = Path("config") / "approved_sources.5e_phb.local.json"
+DEFAULT_OUTPUT_PATH = Path("settings") / "approved_sources.5e_phb.local.json"
 DEFAULT_MAX_SOURCE_BYTES = 32 * 1024 * 1024
 
 

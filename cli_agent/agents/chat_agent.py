@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
-from dci_poc.models import AppConfig
+from cli_agent.models import AppSettings
 
 
 class ChatClient(Protocol):
@@ -11,8 +11,8 @@ class ChatClient(Protocol):
 
 
 class ChatCompletionAgent:
-    def __init__(self, config: AppConfig, chat_client: ChatClient) -> None:
-        self._config = config
+    def __init__(self, settings: AppSettings, chat_client: ChatClient) -> None:
+        self._settings = settings
         self._chat_client = chat_client
 
     def complete(
@@ -22,9 +22,9 @@ class ChatCompletionAgent:
         tool_choice: str | None,
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {
-            "model": self._config.chat_model,
+            "model": self._settings.chat_model,
             "messages": messages,
-            "temperature": self._config.chat_temperature,
+            "temperature": self._settings.chat_temperature,
         }
         if tools:
             payload["tools"] = tools
@@ -40,4 +40,3 @@ class ChatCompletionAgent:
         if not isinstance(message, dict):
             raise RuntimeError("Chat completion response did not include a message")
         return message
-

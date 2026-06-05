@@ -4,9 +4,9 @@ from pathlib import Path
 
 import streamlit as st
 
-from dci_poc.app_factory import build_chat_controller
-from dci_poc.constants import UI_TOOL_LABELS
-from dci_poc.controllers.chat_controller import decode_tool_message_content, visible_messages
+from cli_agent.app_factory import build_chat_controller
+from cli_agent.constants import UI_TOOL_LABELS
+from cli_agent.controllers.chat_controller import decode_tool_message_content, visible_messages
 
 
 def _tool_payloads(messages: list[dict]) -> list[dict]:
@@ -69,8 +69,8 @@ def _messages_with_failed_turn(
     ]
 
 
-st.set_page_config(page_title="DCI Tool POC", layout="wide")
-st.title("DCI Search and Auto Analysis POC")
+st.set_page_config(page_title="CLI Source Tool", layout="wide")
+st.title("CLI Source and Auto Analysis")
 
 
 @st.cache_resource

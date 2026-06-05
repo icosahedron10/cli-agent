@@ -3,16 +3,16 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from dci_poc.agents.chat_agent import ChatCompletionAgent
-from dci_poc.managers.tool_manager import ToolManager, result_as_tool_message
-from dci_poc.models import ChatTurnResult, ToolEnvelope
+from cli_agent.agents.chat_agent import ChatCompletionAgent
+from cli_agent.managers.tool_manager import ToolManager, result_as_tool_message
+from cli_agent.models import ChatTurnResult, ToolEnvelope
 
 
 SYSTEM_MESSAGE = {
     "role": "system",
     "content": (
-        "You are a DCI source analysis assistant. You may use dci_search for cited source lookup "
-        "and auto_analysis for calculations or analysis. The UI labels are dci-search and auto-analysis. "
+        "You are a CLI source analysis assistant. You may use source_search for cited source lookup "
+        "and auto_analysis for calculations or analysis. The UI labels are source-search and auto-analysis. "
         "Ask a concise clarification before using a tool when the user has not supplied enough choices "
         "to make the run reliable. Use at most one tool call per user turn."
     ),

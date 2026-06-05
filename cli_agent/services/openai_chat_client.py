@@ -4,20 +4,20 @@ from typing import Any
 
 import requests
 
-from dci_poc.models import AppConfig
+from cli_agent.models import AppSettings
 
 
 class OpenAIChatClient:
-    def __init__(self, config: AppConfig) -> None:
-        self._config = config
+    def __init__(self, settings: AppSettings) -> None:
+        self._settings = settings
 
     def create_chat_completion(self, payload: dict[str, Any]) -> dict[str, Any]:
-        url = f"{self._config.chat_base_url}/chat/completions"
+        url = f"{self._settings.chat_base_url}/chat/completions"
         headers = {
-            "Authorization": f"Bearer {self._config.chat_api_key}",
+            "Authorization": f"Bearer {self._settings.chat_api_key}",
             "Content-Type": "application/json",
         }
-        response = requests.post(url, headers=headers, json=payload, timeout=self._config.chat_timeout_seconds)
+        response = requests.post(url, headers=headers, json=payload, timeout=self._settings.chat_timeout_seconds)
         response.raise_for_status()
         data = response.json()
         if not isinstance(data, dict):

@@ -1,11 +1,11 @@
-# DCI Search and Auto Analysis Tool POC
+# CLI Source and Auto Analysis Tool
 
 Greenfield Streamlit proof harness for exposing two Chat Completions tools to an OpenAI-compatible chat model:
 
-- `dci_search`, shown in the UI as `dci-search`
+- `source_search`, shown in the UI as `source-search`
 - `auto_analysis`, shown in the UI as `auto-analysis`
 
-The reusable implementation lives in plain Python modules under `dci_poc/`. Streamlit only renders the temporary chat UI and artifacts.
+The reusable implementation lives in plain Python modules under `cli_agent/`. Streamlit only renders the temporary chat UI and artifacts.
 
 ## Architecture
 
@@ -17,20 +17,18 @@ The reusable implementation lives in plain Python modules under `dci_poc/`. Stre
 ## Local Setup
 
 ```powershell
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+poetry install
 ```
 
-Configure an OpenAI-compatible chat endpoint:
+Set the OpenAI-compatible chat endpoint:
 
 ```powershell
-$env:DCI_CHAT_BASE_URL="http://localhost:11434/v1"
-$env:DCI_CHAT_MODEL="llama3.2"
-$env:DCI_CHAT_API_KEY="not-needed"
+$env:CLI_AGENT_CHAT_BASE_URL="http://localhost:11434/v1"
+$env:CLI_AGENT_CHAT_MODEL="llama3.2"
+$env:CLI_AGENT_CHAT_API_KEY="not-needed"
 ```
 
-Configure the Copilot CLI worker provider:
+Set the Copilot CLI worker provider:
 
 ```powershell
 $env:COPILOT_PROVIDER_BASE_URL="http://host.docker.internal:11434"
@@ -41,32 +39,32 @@ $env:COPILOT_OFFLINE="true"
 Build the worker image once:
 
 ```powershell
-docker build -t dci-copilot-worker:local worker
+docker build -t cli-agent-worker:local worker
 ```
 
 Run the Streamlit proof harness:
 
 ```powershell
-streamlit run streamlit_app.py
+poetry run streamlit run streamlit_app.py
 ```
 
 ## Approved Sources
 
-The model can only request exact strings from `config/approved_sources.json`. The dispatcher rejects any path not on that shortlist before Docker starts.
+The model can only request exact strings from `settings/approved_sources.json`. The dispatcher rejects any path not on that shortlist before Docker starts.
 
 For the local 5e PHB test corpus, use chapter PDFs instead of the full book PDF. The full
 `5e PHB/Player's Handbook.pdf` file is about 96 MiB and is intentionally above the default
-single-source limit. A committed example config is available at:
+single-source limit. A committed example settings file is available at:
 
 ```text
-config/approved_sources.5e_phb.example.json
+settings/approved_sources.5e_phb.example.json
 ```
 
-To regenerate a local config from the chapter PDFs:
+To regenerate a local settings file from the chapter PDFs:
 
 ```powershell
-python scripts\build_approved_sources.py --corpus "5e PHB\chapters" --output config\approved_sources.5e_phb.local.json
-$env:DCI_APPROVED_SOURCES_PATH="config\approved_sources.5e_phb.local.json"
+poetry run python scripts\build_approved_sources.py --corpus "5e PHB\chapters" --output settings\approved_sources.5e_phb.local.json
+$env:CLI_AGENT_APPROVED_SOURCES_PATH="settings\approved_sources.5e_phb.local.json"
 ```
 
 PDF sources are copied into the run folder and converted to `.pdf.txt` files with page markers
@@ -102,13 +100,13 @@ Default limits:
 
 | Setting | Default | Purpose |
 | --- | ---: | --- |
-| `DCI_MAX_CONCURRENT_WORKER_RUNS` | `2` | Maximum concurrent Docker worker runs per app process. |
-| `DCI_WORKER_QUEUE_TIMEOUT_SECONDS` | `30` | How long a request waits for a worker slot before returning `capacity_exceeded`. |
-| `DCI_WORKER_TIMEOUT_SECONDS` | `180` | Maximum runtime for a single worker container. |
-| `DCI_CHAT_TIMEOUT_SECONDS` | `120` | Maximum wait for each OpenAI-compatible chat completion call. |
-| `DCI_MAX_SOURCES_PER_RUN` | `4` | Maximum approved source files copied into one run. |
-| `DCI_MAX_SOURCE_BYTES` | `33554432` | Maximum bytes for one requested source, 32 MiB by default. |
-| `DCI_MAX_TOTAL_SOURCE_BYTES_PER_RUN` | `67108864` | Maximum total requested source bytes, 64 MiB by default. |
+| `CLI_AGENT_MAX_CONCURRENT_WORKER_RUNS` | `2` | Maximum concurrent Docker worker runs per app process. |
+| `CLI_AGENT_WORKER_QUEUE_TIMEOUT_SECONDS` | `30` | How long a request waits for a worker slot before returning `capacity_exceeded`. |
+| `CLI_AGENT_WORKER_TIMEOUT_SECONDS` | `180` | Maximum runtime for a single worker container. |
+| `CLI_AGENT_CHAT_TIMEOUT_SECONDS` | `120` | Maximum wait for each OpenAI-compatible chat completion call. |
+| `CLI_AGENT_MAX_SOURCES_PER_RUN` | `4` | Maximum approved source files copied into one run. |
+| `CLI_AGENT_MAX_SOURCE_BYTES` | `33554432` | Maximum bytes for one requested source, 32 MiB by default. |
+| `CLI_AGENT_MAX_TOTAL_SOURCE_BYTES_PER_RUN` | `67108864` | Maximum total requested source bytes, 64 MiB by default. |
 
 Each manifest records selected source byte sizes and whether the worker timed out or hit capacity.
 
@@ -133,5 +131,5 @@ Each manifest records selected source byte sizes and whether the worker timed ou
 ## Tests
 
 ```powershell
-pytest
+poetry run pytest
 ```
