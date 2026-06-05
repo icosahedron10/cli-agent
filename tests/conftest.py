@@ -6,11 +6,11 @@ import json
 
 import pytest
 
-from dci_poc.models import AppConfig
+from cli_agent.models import AppSettings
 
 
 @pytest.fixture
-def app_config(tmp_path: Path) -> AppConfig:
+def app_settings(tmp_path: Path) -> AppSettings:
     source_path = tmp_path / "sample_sources" / "dnd5e_hp_reference.md"
     source_path.parent.mkdir()
     source_path.write_text(
@@ -20,9 +20,9 @@ def app_config(tmp_path: Path) -> AppConfig:
         "After level 1 use fixed 6 plus Constitution modifier or rolled d10 plus modifier.\n",
         encoding="utf-8",
     )
-    config_path = tmp_path / "config" / "approved_sources.json"
-    config_path.parent.mkdir()
-    config_path.write_text(
+    settings_path = tmp_path / "settings" / "approved_sources.json"
+    settings_path.parent.mkdir()
+    settings_path.write_text(
         json.dumps(
             {
                 "sources": [
@@ -36,16 +36,16 @@ def app_config(tmp_path: Path) -> AppConfig:
         ),
         encoding="utf-8",
     )
-    return AppConfig(
+    return AppSettings(
         repo_root=tmp_path,
-        approved_sources_path=config_path,
+        approved_sources_path=settings_path,
         runs_root=tmp_path / "python-agent-runs",
         chat_base_url="http://local.test/v1",
         chat_api_key="test-key",
         chat_model="test-model",
         chat_temperature=0.0,
         chat_timeout_seconds=120.0,
-        worker_image="dci-copilot-worker:test",
+        worker_image="cli-agent-worker:test",
         worker_timeout_seconds=30,
         worker_queue_timeout_seconds=30.0,
         max_concurrent_worker_runs=2,
@@ -60,6 +60,5 @@ def app_config(tmp_path: Path) -> AppConfig:
     )
 
 
-def with_config_path(config: AppConfig, path: Path) -> AppConfig:
-    return replace(config, approved_sources_path=path)
-
+def with_settings_path(settings: AppSettings, path: Path) -> AppSettings:
+    return replace(settings, approved_sources_path=path)

@@ -7,7 +7,7 @@ from typing import Any
 
 
 class ToolName(str, Enum):
-    DCI_SEARCH = "dci_search"
+    SOURCE_SEARCH = "source_search"
     AUTO_ANALYSIS = "auto_analysis"
 
 
@@ -29,7 +29,7 @@ class SourceEntry:
 
 
 @dataclass(frozen=True)
-class AppConfig:
+class AppSettings:
     repo_root: Path
     approved_sources_path: Path
     runs_root: Path

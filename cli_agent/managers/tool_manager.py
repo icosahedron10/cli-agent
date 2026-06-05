@@ -4,9 +4,9 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
-from dci_poc.constants import API_TOOL_AUTO_ANALYSIS, API_TOOL_DCI_SEARCH
-from dci_poc.exceptions import ApprovedSourceError, ToolDispatchError
-from dci_poc.models import (
+from cli_agent.constants import API_TOOL_AUTO_ANALYSIS, API_TOOL_SOURCE_SEARCH
+from cli_agent.exceptions import ApprovedSourceError, ToolDispatchError
+from cli_agent.models import (
     NeedsClarification,
     RunnerResult,
     ToolEnvelope,
@@ -14,11 +14,11 @@ from dci_poc.models import (
     ToolStatus,
     WorkerRunSpec,
 )
-from dci_poc.services.approved_sources import ApprovedSourceService
-from dci_poc.services.artifact_service import ArtifactService
-from dci_poc.services.docker_runner import DockerRunner
-from dci_poc.services.prompt_service import WorkerPromptService
-from dci_poc.services.run_folder_service import RunFolderService
+from cli_agent.services.approved_sources import ApprovedSourceService
+from cli_agent.services.artifact_service import ArtifactService
+from cli_agent.services.docker_runner import DockerRunner
+from cli_agent.services.prompt_service import WorkerPromptService
+from cli_agent.services.run_folder_service import RunFolderService
 
 
 class ToolManager:
@@ -86,7 +86,7 @@ def _parse_tool_call(tool_call: dict[str, Any]) -> tuple[ToolName, dict[str, Any
         raise ToolDispatchError("Tool call is missing function payload")
 
     name = function.get("name")
-    if name not in {API_TOOL_DCI_SEARCH, API_TOOL_AUTO_ANALYSIS}:
+    if name not in {API_TOOL_SOURCE_SEARCH, API_TOOL_AUTO_ANALYSIS}:
         raise ToolDispatchError(f"Unknown tool requested: {name}")
 
     raw_arguments = function.get("arguments", "{}")

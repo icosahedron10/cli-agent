@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from dci_poc.models import RunnerResult, RunPaths
+from cli_agent.models import RunnerResult, RunPaths
 
 
 class FakeChatClient:
@@ -53,4 +53,3 @@ class FakeRunner:
 
 def list_files(root: Path) -> list[str]:
     return sorted(str(path.relative_to(root)) for path in root.rglob("*") if path.is_file())
-

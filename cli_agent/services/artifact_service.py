@@ -5,8 +5,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from dci_poc.constants import ANSWER_FILENAME, MANIFEST_FILENAME, NEEDS_CLARIFICATION_FILENAME
-from dci_poc.models import (
+from cli_agent.constants import ANSWER_FILENAME, MANIFEST_FILENAME, NEEDS_CLARIFICATION_FILENAME
+from cli_agent.models import (
     NeedsClarification,
     RunnerResult,
     SourceEntry,

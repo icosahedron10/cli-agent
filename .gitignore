@@ -6,4 +6,4 @@ __pycache__/
 *.pyc
 python-agent-runs/
 .streamlit/secrets.toml
-config/*.local.json
+settings/*.local.json

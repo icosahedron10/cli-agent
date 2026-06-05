@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from dci_poc.models import WorkerRunSpec
+from cli_agent.models import WorkerRunSpec
 
 
 class WorkerPromptService:
@@ -15,7 +15,7 @@ class WorkerPromptService:
         instructions = _tool_instructions(spec)
         return "\n".join(
             [
-                "You are a short-lived DCI analysis worker running inside a restricted Docker container.",
+                "You are a short-lived CLI analysis worker running inside a restricted Docker container.",
                 "Read only the raw files listed below. Do not use network sources.",
                 "Write all outputs under /workspace/output.",
                 "Use /workspace/work for temporary files and calculations.",
@@ -41,10 +41,10 @@ class WorkerPromptService:
 
 
 def _tool_instructions(spec: WorkerRunSpec) -> str:
-    if spec.tool_name.value == "dci_search":
+    if spec.tool_name.value == "source_search":
         return "\n".join(
             [
-                "Mode: dci_search.",
+                "Mode: source_search.",
                 "Produce cited context only.",
                 "Use concise excerpts or paraphrases backed by citations.",
                 "Every substantive bullet must cite filename plus line, section, row, or page when available.",

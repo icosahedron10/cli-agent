@@ -5,17 +5,17 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from dci_poc.exceptions import ToolDispatchError
-from dci_poc.models import AppConfig, RunPaths, SourceEntry, ToolName
+from cli_agent.exceptions import ToolDispatchError
+from cli_agent.models import AppSettings, RunPaths, SourceEntry, ToolName
 
 
 class RunFolderService:
-    def __init__(self, config: AppConfig) -> None:
-        self._config = config
+    def __init__(self, settings: AppSettings) -> None:
+        self._settings = settings
 
     def create_run_folder(self, tool_name: ToolName) -> RunPaths:
         run_id = _new_run_id(tool_name)
-        root = self._config.runs_root / run_id
+        root = self._settings.runs_root / run_id
         input_dir = root / "input"
         work_dir = root / "work"
         output_dir = root / "output"
@@ -59,7 +59,7 @@ def _extract_pdf_text(pdf_path: Path) -> Path:
         from pypdf import PdfReader
     except ImportError as exc:
         raise ToolDispatchError(
-            "PDF source requested, but pypdf is not installed. Install requirements.txt before using PDFs."
+            "PDF source requested, but pypdf is not installed. Run `poetry install` before using PDFs."
         ) from exc
 
     try:
