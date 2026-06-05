@@ -3,15 +3,23 @@ from __future__ import annotations
 from dci_poc.constants import API_TOOL_AUTO_ANALYSIS, API_TOOL_DCI_SEARCH
 
 
-def build_tool_schemas(approved_source_paths: list[str]) -> list[dict]:
+def build_tool_schemas(approved_source_paths: list[str], max_sources_per_run: int | None = None) -> list[dict]:
     if not approved_source_paths:
         raise ValueError("At least one approved source path is required")
 
-    source_items = {
-        "type": "string",
-        "enum": approved_source_paths,
-        "description": "Exact path string from the approved source shortlist.",
+    source_paths_schema: dict = {
+        "type": "array",
+        "items": {
+            "type": "string",
+            "enum": approved_source_paths,
+            "description": "Exact path string from the approved source shortlist.",
+        },
+        "minItems": 1,
+        "uniqueItems": True,
+        "description": "Approved source paths to inspect.",
     }
+    if max_sources_per_run is not None:
+        source_paths_schema["maxItems"] = max_sources_per_run
 
     return [
         {
@@ -30,13 +38,7 @@ def build_tool_schemas(approved_source_paths: list[str]) -> list[dict]:
                             "type": "string",
                             "description": "The user's search question, copied with enough context to answer.",
                         },
-                        "source_paths": {
-                            "type": "array",
-                            "items": source_items,
-                            "minItems": 1,
-                            "uniqueItems": True,
-                            "description": "Approved source paths to inspect.",
-                        },
+                        "source_paths": source_paths_schema,
                     },
                     "required": ["question", "source_paths"],
                     "additionalProperties": False,
@@ -60,13 +62,7 @@ def build_tool_schemas(approved_source_paths: list[str]) -> list[dict]:
                             "type": "string",
                             "description": "The analysis question, including resolved user choices.",
                         },
-                        "source_paths": {
-                            "type": "array",
-                            "items": source_items,
-                            "minItems": 1,
-                            "uniqueItems": True,
-                            "description": "Approved source paths to inspect.",
-                        },
+                        "source_paths": source_paths_schema,
                         "analysis_goal": {
                             "type": "string",
                             "description": "Short statement of the calculation or analysis output expected.",
@@ -78,4 +74,3 @@ def build_tool_schemas(approved_source_paths: list[str]) -> list[dict]:
             },
         },
     ]
-

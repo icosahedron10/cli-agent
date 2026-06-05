@@ -16,6 +16,7 @@ class ToolStatus(str, Enum):
     ERROR = "error"
     NEEDS_CLARIFICATION = "needs_clarification"
     TIMEOUT = "timeout"
+    CAPACITY_EXCEEDED = "capacity_exceeded"
 
 
 @dataclass(frozen=True)
@@ -24,6 +25,7 @@ class SourceEntry:
     label: str
     description: str
     absolute_path: Path
+    size_bytes: int
 
 
 @dataclass(frozen=True)
@@ -35,8 +37,14 @@ class AppConfig:
     chat_api_key: str
     chat_model: str
     chat_temperature: float
+    chat_timeout_seconds: float
     worker_image: str
     worker_timeout_seconds: int
+    worker_queue_timeout_seconds: float
+    max_concurrent_worker_runs: int
+    max_sources_per_run: int
+    max_source_bytes: int
+    max_total_source_bytes_per_run: int
     copilot_provider_base_url: str
     copilot_model: str
     copilot_provider_api_key: str | None = None
@@ -68,6 +76,7 @@ class RunnerResult:
     stdout: str
     stderr: str
     timed_out: bool = False
+    capacity_exceeded: bool = False
 
 
 @dataclass(frozen=True)
@@ -117,4 +126,3 @@ class ChatTurnResult:
     messages: list[dict[str, Any]]
     assistant_message: dict[str, Any]
     tool_envelopes: list[ToolEnvelope] = field(default_factory=list)
-

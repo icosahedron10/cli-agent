@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+import json
 import subprocess
 from pathlib import Path
 
@@ -46,6 +48,8 @@ def test_artifact_service_writes_manifest_and_collects_artifacts(app_config) -> 
     assert envelope.citation_summary == ["sample_sources/dnd5e_hp_reference.md"]
     assert any(path.endswith("results.csv") for path in envelope.artifact_paths)
     assert (run_paths.output_dir / "manifest.json").exists()
+    manifest = json.loads((run_paths.output_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["source_bytes"]["sample_sources/dnd5e_hp_reference.md"] > 0
 
 
 def test_artifact_service_reports_missing_required_answer(app_config) -> None:
@@ -62,6 +66,22 @@ def test_artifact_service_reports_missing_required_answer(app_config) -> None:
 
     assert envelope.status.value == "error"
     assert "answer.md" in envelope.error
+
+
+def test_artifact_service_reports_capacity_exceeded(app_config) -> None:
+    run_paths = RunFolderService(app_config).create_run_folder(ToolName.DCI_SEARCH)
+    sources = ApprovedSourceService(app_config).all_sources()
+
+    envelope = ArtifactService().collect(
+        run_paths,
+        ToolName.DCI_SEARCH,
+        sources,
+        RunnerResult(exit_code=125, stdout="", stderr="worker slots full", capacity_exceeded=True),
+        started_at=__import__("datetime").datetime.now(__import__("datetime").timezone.utc),
+    )
+
+    assert envelope.status.value == "capacity_exceeded"
+    assert envelope.error == "worker slots full"
 
 
 def test_docker_runner_builds_command_with_env_and_mount(app_config) -> None:
@@ -107,3 +127,31 @@ def test_docker_runner_handles_timeout(app_config, monkeypatch) -> None:
     assert result.timed_out is True
     assert result.exit_code == 124
     assert (run_paths.logs_dir / "copilot.stdout.log").read_text(encoding="utf-8") == "partial"
+
+
+def test_docker_runner_rejects_when_capacity_is_full(app_config, monkeypatch) -> None:
+    config = replace(
+        app_config,
+        max_concurrent_worker_runs=1,
+        worker_queue_timeout_seconds=0.0,
+    )
+    run_paths = RunFolderService(config).create_run_folder(ToolName.DCI_SEARCH)
+    runner = DockerRunner(config)
+    spawned = False
+
+    def fake_run(*args, **kwargs):
+        nonlocal spawned
+        spawned = True
+        return subprocess.CompletedProcess(args[0], 0, stdout="", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    assert runner._worker_slots.acquire(blocking=False)
+    try:
+        result = runner.run(run_paths, "prompt")
+    finally:
+        runner._worker_slots.release()
+
+    assert result.capacity_exceeded is True
+    assert result.exit_code == 125
+    assert spawned is False
+    assert "Worker capacity exceeded" in (run_paths.logs_dir / "copilot.stderr.log").read_text(encoding="utf-8")

@@ -16,7 +16,10 @@ from dci_poc.services.run_folder_service import RunFolderService
 def build_chat_controller() -> tuple[ChatController, ApprovedSourceService]:
     config = load_app_config()
     approved_sources = ApprovedSourceService(config)
-    tool_schemas = build_tool_schemas(approved_sources.approved_paths())
+    tool_schemas = build_tool_schemas(
+        approved_sources.approved_paths(),
+        max_sources_per_run=config.max_sources_per_run,
+    )
     chat_client = OpenAIChatClient(config)
     agent = ChatCompletionAgent(config, chat_client)
     tool_manager = ToolManager(

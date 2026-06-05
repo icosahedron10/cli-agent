@@ -35,6 +35,8 @@ class ApprovedSourceService:
                 raise ApprovedSourceError(f"Unapproved source path requested: {path}")
             entries.append(entry)
             seen.add(path)
+
+        _validate_source_limits(entries, self._config)
         return entries
 
 
@@ -90,5 +92,37 @@ def _parse_source_entry(repo_root: Path, item: Any, index: int) -> SourceEntry:
         label=label,
         description=description,
         absolute_path=absolute_path,
+        size_bytes=absolute_path.stat().st_size,
     )
 
+
+def _validate_source_limits(entries: list[SourceEntry], config: AppConfig) -> None:
+    if len(entries) > config.max_sources_per_run:
+        raise ApprovedSourceError(
+            f"Requested {len(entries)} sources; maximum per run is {config.max_sources_per_run}."
+        )
+
+    oversized = [entry for entry in entries if entry.size_bytes > config.max_source_bytes]
+    if oversized:
+        entry = oversized[0]
+        raise ApprovedSourceError(
+            f"Requested source is too large: {entry.path} is {_format_bytes(entry.size_bytes)}; "
+            f"limit is {_format_bytes(config.max_source_bytes)}."
+        )
+
+    total_size = sum(entry.size_bytes for entry in entries)
+    if total_size > config.max_total_source_bytes_per_run:
+        raise ApprovedSourceError(
+            f"Requested sources total {_format_bytes(total_size)}; "
+            f"limit is {_format_bytes(config.max_total_source_bytes_per_run)}."
+        )
+
+
+def _format_bytes(size_bytes: int) -> str:
+    mib = size_bytes / (1024 * 1024)
+    if mib >= 1:
+        return f"{mib:.1f} MiB"
+    kib = size_bytes / 1024
+    if kib >= 1:
+        return f"{kib:.1f} KiB"
+    return f"{size_bytes} bytes"

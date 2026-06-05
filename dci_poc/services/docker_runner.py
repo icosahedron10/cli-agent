@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+import threading
 
 from dci_poc.models import AppConfig, RunnerResult, RunPaths
 
@@ -8,6 +9,7 @@ from dci_poc.models import AppConfig, RunnerResult, RunPaths
 class DockerRunner:
     def __init__(self, config: AppConfig) -> None:
         self._config = config
+        self._worker_slots = threading.BoundedSemaphore(config.max_concurrent_worker_runs)
 
     def build_command(self, run_paths: RunPaths, prompt: str) -> list[str]:
         command = ["docker", "run", "--rm"]
@@ -40,28 +42,41 @@ class DockerRunner:
         return command
 
     def run(self, run_paths: RunPaths, prompt: str) -> RunnerResult:
+        acquired = self._worker_slots.acquire(timeout=self._config.worker_queue_timeout_seconds)
+        if not acquired:
+            message = (
+                "Worker capacity exceeded. "
+                f"Already running {self._config.max_concurrent_worker_runs} worker(s); "
+                f"waited {self._config.worker_queue_timeout_seconds:g} seconds for a slot."
+            )
+            _write_runner_logs(run_paths, "", message)
+            return RunnerResult(exit_code=125, stdout="", stderr=message, capacity_exceeded=True)
+
         command = self.build_command(run_paths, prompt)
         try:
-            completed = subprocess.run(
-                command,
-                capture_output=True,
-                text=True,
-                timeout=self._config.worker_timeout_seconds,
-                check=False,
-            )
-        except subprocess.TimeoutExpired as exc:
-            stdout = exc.stdout or ""
-            stderr = exc.stderr or ""
-            _write_runner_logs(run_paths, stdout, stderr)
-            return RunnerResult(exit_code=124, stdout=stdout, stderr=stderr, timed_out=True)
+            try:
+                completed = subprocess.run(
+                    command,
+                    capture_output=True,
+                    text=True,
+                    timeout=self._config.worker_timeout_seconds,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired as exc:
+                stdout = exc.stdout or ""
+                stderr = exc.stderr or ""
+                _write_runner_logs(run_paths, stdout, stderr)
+                return RunnerResult(exit_code=124, stdout=stdout, stderr=stderr, timed_out=True)
 
-        _write_runner_logs(run_paths, completed.stdout, completed.stderr)
-        return RunnerResult(
-            exit_code=completed.returncode,
-            stdout=completed.stdout,
-            stderr=completed.stderr,
-            timed_out=False,
-        )
+            _write_runner_logs(run_paths, completed.stdout, completed.stderr)
+            return RunnerResult(
+                exit_code=completed.returncode,
+                stdout=completed.stdout,
+                stderr=completed.stderr,
+                timed_out=False,
+            )
+        finally:
+            self._worker_slots.release()
 
 
 def _docker_env_args(config: AppConfig) -> list[str]:
