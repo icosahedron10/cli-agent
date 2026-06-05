@@ -7,10 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from dci_poc.models import RunnerResult, ToolName
+from dci_poc.models import RunnerResult, ToolName, WorkerRunSpec
 from dci_poc.services.approved_sources import ApprovedSourceService
 from dci_poc.services.artifact_service import ArtifactService
 from dci_poc.services.docker_runner import DockerRunner
+from dci_poc.services.prompt_service import WorkerPromptService
 from dci_poc.services.run_folder_service import RunFolderService
 
 
@@ -26,6 +27,48 @@ def test_run_folder_setup_and_source_copy(app_config) -> None:
     assert run_paths.output_dir.exists()
     assert run_paths.logs_dir.exists()
     assert copied[0].relative_to(run_paths.input_dir).as_posix() == "sample_sources/dnd5e_hp_reference.md"
+
+
+def test_run_folder_prepares_pdf_text_for_worker(app_config, monkeypatch) -> None:
+    source_path = app_config.repo_root / "docs" / "rules.pdf"
+    source_path.parent.mkdir()
+    source_path.write_bytes(b"%PDF-1.7\n")
+    config_path = app_config.repo_root / "pdf_sources.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "sources": [
+                    {"path": "docs/rules.pdf", "label": "Rules PDF", "description": ""}
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    config = replace(app_config, approved_sources_path=config_path)
+    sources = ApprovedSourceService(config).all_sources()
+    run_paths = RunFolderService(config).create_run_folder(ToolName.DCI_SEARCH)
+
+    def fake_extract_pdf_text(pdf_path: Path) -> Path:
+        text_path = pdf_path.with_suffix(pdf_path.suffix + ".txt")
+        text_path.write_text("--- Page 1 ---\nRules text.", encoding="utf-8")
+        return text_path
+
+    monkeypatch.setattr("dci_poc.services.run_folder_service._extract_pdf_text", fake_extract_pdf_text)
+    prepared = RunFolderService(config).copy_sources(run_paths, sources)
+    prompt = WorkerPromptService().build_prompt(
+        WorkerRunSpec(
+            tool_name=ToolName.DCI_SEARCH,
+            question="Find rules text.",
+            source_entries=sources,
+            run_paths=run_paths,
+        ),
+        prepared,
+    )
+
+    assert (run_paths.input_dir / "docs" / "rules.pdf").exists()
+    assert prepared[0].relative_to(run_paths.input_dir).as_posix() == "docs/rules.pdf.txt"
+    assert "extracted text with page markers" in prompt
+    assert "/workspace/input/docs/rules.pdf.txt" in prompt
 
 
 def test_artifact_service_writes_manifest_and_collects_artifacts(app_config) -> None:
@@ -127,6 +170,22 @@ def test_docker_runner_handles_timeout(app_config, monkeypatch) -> None:
     assert result.timed_out is True
     assert result.exit_code == 124
     assert (run_paths.logs_dir / "copilot.stdout.log").read_text(encoding="utf-8") == "partial"
+
+
+def test_docker_runner_handles_startup_failure(app_config, monkeypatch) -> None:
+    run_paths = RunFolderService(app_config).create_run_folder(ToolName.DCI_SEARCH)
+
+    def fake_run(*args, **kwargs):
+        raise FileNotFoundError("docker")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    result = DockerRunner(app_config).run(run_paths, "prompt")
+
+    assert result.exit_code == 126
+    assert "Could not start Docker worker" in result.stderr
+    assert "Could not start Docker worker" in (run_paths.logs_dir / "copilot.stderr.log").read_text(
+        encoding="utf-8"
+    )
 
 
 def test_docker_runner_rejects_when_capacity_is_full(app_config, monkeypatch) -> None:

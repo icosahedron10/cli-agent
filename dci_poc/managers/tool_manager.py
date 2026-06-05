@@ -62,17 +62,17 @@ class ToolManager:
                         artifact_paths=[],
                         citation_summary=[],
                         needs_clarification=clarification,
-                    )
+            )
 
             run_paths = self._run_folders.create_run_folder(tool_name)
-            copied_paths = self._run_folders.copy_sources(run_paths, sources)
+            prepared_paths = self._run_folders.copy_sources(run_paths, sources)
             spec = WorkerRunSpec(
                 tool_name=tool_name,
                 question=question,
                 source_entries=sources,
                 run_paths=run_paths,
             )
-            prompt = self._prompt_service.build_prompt(spec, copied_paths)
+            prompt = self._prompt_service.build_prompt(spec, prepared_paths)
             started_at = datetime.now(timezone.utc)
             runner_result = self._runner.run(run_paths, prompt)
             return self._artifact_service.collect(run_paths, tool_name, sources, runner_result, started_at)
@@ -135,4 +135,3 @@ def result_as_tool_message(tool_call_id: str, envelope: ToolEnvelope) -> dict[st
         "tool_call_id": tool_call_id,
         "content": json.dumps(envelope.to_model_json(), separators=(",", ":")),
     }
-

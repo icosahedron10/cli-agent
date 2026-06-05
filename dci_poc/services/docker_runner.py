@@ -67,6 +67,10 @@ class DockerRunner:
                 stderr = exc.stderr or ""
                 _write_runner_logs(run_paths, stdout, stderr)
                 return RunnerResult(exit_code=124, stdout=stdout, stderr=stderr, timed_out=True)
+            except OSError as exc:
+                stderr = f"Could not start Docker worker: {exc}"
+                _write_runner_logs(run_paths, "", stderr)
+                return RunnerResult(exit_code=126, stdout="", stderr=stderr)
 
             _write_runner_logs(run_paths, completed.stdout, completed.stderr)
             return RunnerResult(

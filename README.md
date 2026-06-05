@@ -69,6 +69,10 @@ python scripts\build_approved_sources.py --corpus "5e PHB\chapters" --output con
 $env:DCI_APPROVED_SOURCES_PATH="config\approved_sources.5e_phb.local.json"
 ```
 
+PDF sources are copied into the run folder and converted to `.pdf.txt` files with page markers
+before the Docker worker starts. The worker is pointed at the extracted text file, not the binary
+PDF.
+
 ## Run Folders
 
 Each accepted tool call creates one run folder:
@@ -115,6 +119,9 @@ Each manifest records selected source byte sizes and whether the worker timed ou
 - There is no retrieval index or PDF text cache. Each accepted tool run copies the requested files
   into an isolated run folder and asks the worker to inspect them, so large PDFs cost disk, time,
   and model context on every run.
+- PDF support depends on extractable embedded text through `pypdf`. Scanned/image-only PDFs fail
+  before worker execution instead of producing guessed answers. Layout-heavy tables may still need
+  manual validation.
 - The app has no authentication, authorization, quota tracking, billing controls, or automated run
   folder retention. Add those before exposing it beyond a trusted internal group.
 - Worker results remain model-dependent. The tool enforces source selection, output contracts,

@@ -6,11 +6,11 @@ from dci_poc.models import WorkerRunSpec
 
 
 class WorkerPromptService:
-    def build_prompt(self, spec: WorkerRunSpec, copied_input_paths: list[Path]) -> str:
+    def build_prompt(self, spec: WorkerRunSpec, prepared_input_paths: list[Path]) -> str:
         source_lines = []
-        for entry, copied_path in zip(spec.source_entries, copied_input_paths, strict=True):
-            container_path = _container_path(copied_path, spec.run_paths.root)
-            source_lines.append(f"- {entry.path}: {container_path} ({entry.label})")
+        for entry, prepared_path in zip(spec.source_entries, prepared_input_paths, strict=True):
+            container_path = _container_path(prepared_path, spec.run_paths.root)
+            source_lines.append(_source_line(entry.path, entry.label, container_path, prepared_path))
 
         instructions = _tool_instructions(spec)
         return "\n".join(
@@ -66,3 +66,8 @@ def _container_path(path: Path, run_root: Path) -> str:
     relative = path.resolve().relative_to(run_root.resolve())
     return "/workspace/" + relative.as_posix()
 
+
+def _source_line(source_path: str, label: str, container_path: str, prepared_path: Path) -> str:
+    if source_path.lower().endswith(".pdf") and prepared_path.name.lower().endswith(".pdf.txt"):
+        return f"- {source_path}: {container_path} ({label}; extracted text with page markers)"
+    return f"- {source_path}: {container_path} ({label})"

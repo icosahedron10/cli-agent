@@ -5,6 +5,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+from dci_poc.exceptions import ToolDispatchError
 from dci_poc.models import AppConfig, RunPaths, SourceEntry, ToolName
 
 
@@ -33,16 +34,52 @@ class RunFolderService:
         )
 
     def copy_sources(self, run_paths: RunPaths, sources: list[SourceEntry]) -> list[Path]:
-        copied: list[Path] = []
+        prepared: list[Path] = []
         for source in sources:
             destination = run_paths.input_dir / Path(source.path)
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source.absolute_path, destination)
-            copied.append(destination)
-        return copied
+            prepared.append(_prepare_worker_input(destination))
+        return prepared
 
 
 def _new_run_id(tool_name: ToolName) -> str:
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     return f"{timestamp}-{tool_name.value}-{uuid.uuid4().hex[:8]}"
 
+
+def _prepare_worker_input(copied_source: Path) -> Path:
+    if copied_source.suffix.lower() != ".pdf":
+        return copied_source
+    return _extract_pdf_text(copied_source)
+
+
+def _extract_pdf_text(pdf_path: Path) -> Path:
+    try:
+        from pypdf import PdfReader
+    except ImportError as exc:
+        raise ToolDispatchError(
+            "PDF source requested, but pypdf is not installed. Install requirements.txt before using PDFs."
+        ) from exc
+
+    try:
+        reader = PdfReader(str(pdf_path))
+        page_blocks: list[str] = []
+        found_text = False
+        for index, page in enumerate(reader.pages, start=1):
+            page_text = page.extract_text() or ""
+            if page_text.strip():
+                found_text = True
+            page_blocks.append(f"--- Page {index} ---\n{page_text.strip()}")
+    except Exception as exc:
+        raise ToolDispatchError(f"Could not extract text from PDF source {pdf_path.name}: {exc}") from exc
+
+    if not found_text:
+        raise ToolDispatchError(f"PDF source has no extractable text: {pdf_path.name}")
+
+    text_path = pdf_path.with_suffix(pdf_path.suffix + ".txt")
+    text_path.write_text(
+        f"# Extracted text from {pdf_path.name}\n\n" + "\n\n".join(page_blocks) + "\n",
+        encoding="utf-8",
+    )
+    return text_path
