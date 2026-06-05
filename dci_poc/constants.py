@@ -1,0 +1,15 @@
+from __future__ import annotations
+
+API_TOOL_DCI_SEARCH = "dci_search"
+API_TOOL_AUTO_ANALYSIS = "auto_analysis"
+
+UI_TOOL_LABELS = {
+    API_TOOL_DCI_SEARCH: "dci-search",
+    API_TOOL_AUTO_ANALYSIS: "auto-analysis",
+}
+
+RUNS_DIR_NAME = "python-agent-runs"
+ANSWER_FILENAME = "answer.md"
+MANIFEST_FILENAME = "manifest.json"
+NEEDS_CLARIFICATION_FILENAME = "needs_clarification.json"
+

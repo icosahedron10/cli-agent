@@ -1,0 +1,10 @@
+{
+  "sources": [
+    {
+      "path": "sample_sources/dnd5e_hp_reference.md",
+      "label": "D&D 5e HP quick reference",
+      "description": "Small demo source for hit point calculations and ambiguity checks."
+    }
+  ]
+}
+
