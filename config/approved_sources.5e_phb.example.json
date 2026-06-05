@@ -1,0 +1,114 @@
+{
+  "sources": [
+    {
+      "path": "5e PHB/chapters/00 - Front Matter.pdf",
+      "label": "Front Matter",
+      "description": "Chapter PDF from the local 5e PHB corpus."
+    },
+    {
+      "path": "5e PHB/chapters/01 - Chapter 1 - Step-By-Step Characters.pdf",
+      "label": "Chapter 1 - Step-By-Step Characters",
+      "description": "Chapter PDF from the local 5e PHB corpus."
+    },
+    {
+      "path": "5e PHB/chapters/02 - Chapter 2 - Races.pdf",
+      "label": "Chapter 2 - Races",
+      "description": "Chapter PDF from the local 5e PHB corpus."
+    },
+    {
+      "path": "5e PHB/chapters/03 - Chapter 3 - Classes.pdf",
+      "label": "Chapter 3 - Classes",
+      "description": "Chapter PDF from the local 5e PHB corpus."
+    },
+    {
+      "path": "5e PHB/chapters/04 - Chapter 4 - Personality and Background.pdf",
+      "label": "Chapter 4 - Personality and Background",
+      "description": "Chapter PDF from the local 5e PHB corpus."
+    },
+    {
+      "path": "5e PHB/chapters/05 - Chapter 5 - Equipment.pdf",
+      "label": "Chapter 5 - Equipment",
+      "description": "Chapter PDF from the local 5e PHB corpus."
+    },
+    {
+      "path": "5e PHB/chapters/06 - Chapter 6 - Customization Options.pdf",
+      "label": "Chapter 6 - Customization Options",
+      "description": "Chapter PDF from the local 5e PHB corpus."
+    },
+    {
+      "path": "5e PHB/chapters/07 - Part 2 - Playing the Game.pdf",
+      "label": "Part 2 - Playing the Game",
+      "description": "Chapter PDF from the local 5e PHB corpus."
+    },
+    {
+      "path": "5e PHB/chapters/08 - Chapter 7 - Using Ability Scores.pdf",
+      "label": "Chapter 7 - Using Ability Scores",
+      "description": "Chapter PDF from the local 5e PHB corpus."
+    },
+    {
+      "path": "5e PHB/chapters/09 - Chapter 8 - Adventuring.pdf",
+      "label": "Chapter 8 - Adventuring",
+      "description": "Chapter PDF from the local 5e PHB corpus."
+    },
+    {
+      "path": "5e PHB/chapters/10 - Chapter 9 - Combat.pdf",
+      "label": "Chapter 9 - Combat",
+      "description": "Chapter PDF from the local 5e PHB corpus."
+    },
+    {
+      "path": "5e PHB/chapters/11 - Part 3 - The Rules of Magic.pdf",
+      "label": "Part 3 - The Rules of Magic",
+      "description": "Chapter PDF from the local 5e PHB corpus."
+    },
+    {
+      "path": "5e PHB/chapters/12 - Chapter 10 - Spellcasting.pdf",
+      "label": "Chapter 10 - Spellcasting",
+      "description": "Chapter PDF from the local 5e PHB corpus."
+    },
+    {
+      "path": "5e PHB/chapters/13 - Chapter 11 - Spells.pdf",
+      "label": "Chapter 11 - Spells",
+      "description": "Chapter PDF from the local 5e PHB corpus."
+    },
+    {
+      "path": "5e PHB/chapters/14 - Appendix A - Conditions.pdf",
+      "label": "Appendix A - Conditions",
+      "description": "Chapter PDF from the local 5e PHB corpus."
+    },
+    {
+      "path": "5e PHB/chapters/15 - Appendix B - Gods of the Multiverse.pdf",
+      "label": "Appendix B - Gods of the Multiverse",
+      "description": "Chapter PDF from the local 5e PHB corpus."
+    },
+    {
+      "path": "5e PHB/chapters/16 - Appendix C - The Planes of Existence.pdf",
+      "label": "Appendix C - The Planes of Existence",
+      "description": "Chapter PDF from the local 5e PHB corpus."
+    },
+    {
+      "path": "5e PHB/chapters/17 - Appendix D - Creature Statistics.pdf",
+      "label": "Appendix D - Creature Statistics",
+      "description": "Chapter PDF from the local 5e PHB corpus."
+    },
+    {
+      "path": "5e PHB/chapters/18 - Appendix E - Inspirational Reading.pdf",
+      "label": "Appendix E - Inspirational Reading",
+      "description": "Chapter PDF from the local 5e PHB corpus."
+    },
+    {
+      "path": "5e PHB/chapters/19 - Index.pdf",
+      "label": "Index",
+      "description": "Chapter PDF from the local 5e PHB corpus."
+    },
+    {
+      "path": "5e PHB/chapters/20 - Character Sheets.pdf",
+      "label": "Character Sheets",
+      "description": "Chapter PDF from the local 5e PHB corpus."
+    },
+    {
+      "path": "5e PHB/chapters/21 - What Comes Next.pdf",
+      "label": "What Comes Next",
+      "description": "Chapter PDF from the local 5e PHB corpus."
+    }
+  ]
+}
