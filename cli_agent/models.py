@@ -68,6 +68,7 @@ class WorkerRunSpec:
     question: str
     source_entries: list[SourceEntry]
     run_paths: RunPaths
+    analysis_goal: str | None = None
 
 
 @dataclass(frozen=True)

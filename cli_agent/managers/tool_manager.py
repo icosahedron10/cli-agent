@@ -21,6 +21,16 @@ from cli_agent.services.prompt_service import WorkerPromptService
 from cli_agent.services.run_folder_service import RunFolderService
 
 
+TOOL_REQUIRED_ARGS = {
+    ToolName.SOURCE_SEARCH: {"question", "source_paths"},
+    ToolName.AUTO_ANALYSIS: {"question", "source_paths"},
+}
+TOOL_ALLOWED_ARGS = {
+    ToolName.SOURCE_SEARCH: {"question", "source_paths"},
+    ToolName.AUTO_ANALYSIS: {"question", "source_paths", "analysis_goal"},
+}
+
+
 class ToolManager:
     def __init__(
         self,
@@ -49,7 +59,16 @@ class ToolManager:
     def execute_tool_call(self, tool_call: dict[str, Any]) -> ToolEnvelope:
         try:
             tool_name, args = _parse_tool_call(tool_call)
+            return self.run_tool(tool_name, args)
+        except (ApprovedSourceError, ToolDispatchError, ValueError) as exc:
+            return self.tool_safety_error(str(exc))
+
+    def run_tool(self, tool_name: ToolName, args: dict[str, Any]) -> ToolEnvelope:
+        try:
+            tool_name = _normalize_tool_name(tool_name)
+            _validate_argument_keys(tool_name, args)
             question = _required_string(args, "question")
+            analysis_goal = _optional_string(args, "analysis_goal")
             sources = self._approved_sources.validate_requested_paths(args.get("source_paths"))
 
             if tool_name is ToolName.AUTO_ANALYSIS:
@@ -62,7 +81,7 @@ class ToolManager:
                         artifact_paths=[],
                         citation_summary=[],
                         needs_clarification=clarification,
-            )
+                    )
 
             run_paths = self._run_folders.create_run_folder(tool_name)
             prepared_paths = self._run_folders.copy_sources(run_paths, sources)
@@ -71,6 +90,7 @@ class ToolManager:
                 question=question,
                 source_entries=sources,
                 run_paths=run_paths,
+                analysis_goal=analysis_goal,
             )
             prompt = self._prompt_service.build_prompt(spec, prepared_paths)
             started_at = datetime.now(timezone.utc)
@@ -102,10 +122,38 @@ def _parse_tool_call(tool_call: dict[str, Any]) -> tuple[ToolName, dict[str, Any
     return ToolName(name), args
 
 
+def _normalize_tool_name(tool_name: ToolName) -> ToolName:
+    if isinstance(tool_name, ToolName):
+        return tool_name
+    raise ToolDispatchError(f"Unknown tool requested: {tool_name}")
+
+
+def _validate_argument_keys(tool_name: ToolName, args: dict[str, Any]) -> None:
+    if not isinstance(args, dict):
+        raise ToolDispatchError("Tool arguments must be an object")
+
+    missing = sorted(TOOL_REQUIRED_ARGS[tool_name] - args.keys())
+    if missing:
+        raise ToolDispatchError(f"Missing required tool argument(s): {', '.join(missing)}")
+
+    unknown = sorted(args.keys() - TOOL_ALLOWED_ARGS[tool_name])
+    if unknown:
+        raise ToolDispatchError(f"Unknown tool argument(s): {', '.join(unknown)}")
+
+
 def _required_string(args: dict[str, Any], key: str) -> str:
     value = args.get(key)
     if not isinstance(value, str) or not value.strip():
         raise ToolDispatchError(f"{key} must be a non-empty string")
+    return value.strip()
+
+
+def _optional_string(args: dict[str, Any], key: str) -> str | None:
+    if key not in args:
+        return None
+    value = args[key]
+    if not isinstance(value, str) or not value.strip():
+        raise ToolDispatchError(f"{key} must be a non-empty string when provided")
     return value.strip()
 
 

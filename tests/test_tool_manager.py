@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from cli_agent.constants import API_TOOL_AUTO_ANALYSIS, API_TOOL_SOURCE_SEARCH
 from cli_agent.managers.tool_manager import ToolManager, detect_pre_run_clarification
+from cli_agent.models import ToolName
 from cli_agent.services.approved_sources import ApprovedSourceService
 from cli_agent.services.artifact_service import ArtifactService
 from cli_agent.services.prompt_service import WorkerPromptService
@@ -40,6 +41,58 @@ def test_successful_source_search_returns_report_with_citation(app_settings) -> 
     assert len(runner.calls) == 1
 
 
+def test_run_tool_successful_source_search_returns_report(app_settings) -> None:
+    runner = FakeRunner("success")
+    manager = build_manager(app_settings, runner)
+
+    envelope = manager.run_tool(
+        ToolName.SOURCE_SEARCH,
+        {
+            "question": "Find paladin HP rules.",
+            "source_paths": ["sample_sources/dnd5e_hp_reference.md"],
+        },
+    )
+
+    assert envelope.status.value == "success"
+    assert envelope.report_markdown
+    assert len(runner.calls) == 1
+
+
+def test_run_tool_rejects_unapproved_source_before_runner(app_settings) -> None:
+    runner = FakeRunner("success")
+    manager = build_manager(app_settings, runner)
+
+    envelope = manager.run_tool(
+        ToolName.SOURCE_SEARCH,
+        {
+            "question": "Find paladin HP rules.",
+            "source_paths": ["sample_sources/missing.md"],
+        },
+    )
+
+    assert envelope.status.value == "error"
+    assert envelope.error == "Unapproved source path requested: sample_sources/missing.md"
+    assert runner.calls == []
+
+
+def test_run_tool_rejects_unknown_argument_before_runner(app_settings) -> None:
+    runner = FakeRunner("success")
+    manager = build_manager(app_settings, runner)
+
+    envelope = manager.run_tool(
+        ToolName.SOURCE_SEARCH,
+        {
+            "question": "Find paladin HP rules.",
+            "source_paths": ["sample_sources/dnd5e_hp_reference.md"],
+            "analysis_goal": "Should not be accepted for source_search.",
+        },
+    )
+
+    assert envelope.status.value == "error"
+    assert envelope.error == "Unknown tool argument(s): analysis_goal"
+    assert runner.calls == []
+
+
 def test_successful_auto_analysis_collects_csv_artifact(app_settings) -> None:
     runner = FakeRunner("auto_analysis_success")
     manager = build_manager(app_settings, runner)
@@ -59,6 +112,24 @@ def test_successful_auto_analysis_collects_csv_artifact(app_settings) -> None:
     assert len(runner.calls) == 1
 
 
+def test_run_tool_includes_analysis_goal_in_auto_analysis_prompt(app_settings) -> None:
+    runner = FakeRunner("auto_analysis_success")
+    manager = build_manager(app_settings, runner)
+
+    envelope = manager.run_tool(
+        ToolName.AUTO_ANALYSIS,
+        {
+            "question": "Use fixed HP. Calculate HP for a level 11 dwarf paladin with 17 constitution.",
+            "source_paths": ["sample_sources/dnd5e_hp_reference.md"],
+            "analysis_goal": "Return the final HP total and calculation steps.",
+        },
+    )
+
+    assert envelope.status.value == "success"
+    assert len(runner.calls) == 1
+    assert "Analysis goal: Return the final HP total and calculation steps." in runner.calls[0][1]
+
+
 def test_auto_analysis_ambiguous_hp_question_needs_clarification_before_runner(app_settings) -> None:
     runner = FakeRunner("success")
     manager = build_manager(app_settings, runner)
@@ -75,6 +146,24 @@ def test_auto_analysis_ambiguous_hp_question_needs_clarification_before_runner(a
 
     assert envelope.status.value == "needs_clarification"
     assert envelope.run_id is None
+    assert envelope.needs_clarification is not None
+    assert envelope.needs_clarification.missing_fields == ["hp_method"]
+    assert runner.calls == []
+
+
+def test_run_tool_auto_analysis_ambiguous_hp_question_needs_clarification(app_settings) -> None:
+    runner = FakeRunner("success")
+    manager = build_manager(app_settings, runner)
+
+    envelope = manager.run_tool(
+        ToolName.AUTO_ANALYSIS,
+        {
+            "question": "Calculate HP for a level 11 dwarf paladin with 17 constitution.",
+            "source_paths": ["sample_sources/dnd5e_hp_reference.md"],
+        },
+    )
+
+    assert envelope.status.value == "needs_clarification"
     assert envelope.needs_clarification is not None
     assert envelope.needs_clarification.missing_fields == ["hp_method"]
     assert runner.calls == []

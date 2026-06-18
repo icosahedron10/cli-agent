@@ -13,6 +13,7 @@ class WorkerPromptService:
             source_lines.append(_source_line(entry.path, entry.label, container_path, prepared_path))
 
         instructions = _tool_instructions(spec)
+        analysis_goal_lines = _analysis_goal_lines(spec)
         return "\n".join(
             [
                 "You are a short-lived CLI analysis worker running inside a restricted Docker container.",
@@ -26,6 +27,7 @@ class WorkerPromptService:
                 *source_lines,
                 "",
                 instructions,
+                *analysis_goal_lines,
                 "",
                 "Required output contract:",
                 "- Create /workspace/output/answer.md.",
@@ -60,6 +62,12 @@ def _tool_instructions(spec: WorkerRunSpec) -> str:
             "Include CSV or PNG artifacts only when they make the analysis easier to inspect.",
         ]
     )
+
+
+def _analysis_goal_lines(spec: WorkerRunSpec) -> list[str]:
+    if spec.tool_name.value != "auto_analysis" or spec.analysis_goal is None:
+        return []
+    return ["", f"Analysis goal: {spec.analysis_goal}"]
 
 
 def _container_path(path: Path, run_root: Path) -> str:
