@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any
 
@@ -9,6 +11,7 @@ from cli_agent.exceptions import ApprovedSourceError, ToolDispatchError
 from cli_agent.models import (
     NeedsClarification,
     RunnerResult,
+    RunPaths,
     ToolEnvelope,
     ToolName,
     ToolStatus,
@@ -29,6 +32,7 @@ TOOL_ALLOWED_ARGS = {
     ToolName.SOURCE_SEARCH: {"question", "source_paths"},
     ToolName.AUTO_ANALYSIS: {"question", "source_paths", "analysis_goal"},
 }
+ProgressCallback = Callable[[str, str, dict[str, Any] | None], None]
 
 
 class ToolManager:
@@ -56,22 +60,34 @@ class ToolManager:
             error=message,
         )
 
-    def execute_tool_call(self, tool_call: dict[str, Any]) -> ToolEnvelope:
+    def execute_tool_call(
+        self,
+        tool_call: dict[str, Any],
+        progress_callback: ProgressCallback | None = None,
+    ) -> ToolEnvelope:
         try:
-            tool_name, args = _parse_tool_call(tool_call)
-            return self.run_tool(tool_name, args)
+            with _progress_phase(progress_callback, "parse tool call"):
+                tool_name, args = _parse_tool_call(tool_call)
+            return self.run_tool(tool_name, args, progress_callback)
         except (ApprovedSourceError, ToolDispatchError, ValueError) as exc:
             return self.tool_safety_error(str(exc))
 
-    def run_tool(self, tool_name: ToolName, args: dict[str, Any]) -> ToolEnvelope:
+    def run_tool(
+        self,
+        tool_name: ToolName,
+        args: dict[str, Any],
+        progress_callback: ProgressCallback | None = None,
+    ) -> ToolEnvelope:
         try:
-            _validate_argument_keys(tool_name, args)
-            question = _required_string(args, "question")
-            analysis_goal = _optional_string(args, "analysis_goal")
-            sources = self._approved_sources.validate_requested_paths(args.get("source_paths"))
+            with _progress_phase(progress_callback, "validate tool arguments"):
+                _validate_argument_keys(tool_name, args)
+                question = _required_string(args, "question")
+                analysis_goal = _optional_string(args, "analysis_goal")
+                sources = self._approved_sources.validate_requested_paths(args.get("source_paths"))
 
             if tool_name is ToolName.AUTO_ANALYSIS:
-                clarification = detect_pre_run_clarification(question)
+                with _progress_phase(progress_callback, "pre-run clarification check"):
+                    clarification = detect_pre_run_clarification(question)
                 if clarification is not None:
                     return ToolEnvelope(
                         status=ToolStatus.NEEDS_CLARIFICATION,
@@ -82,21 +98,51 @@ class ToolManager:
                         needs_clarification=clarification,
                     )
 
-            run_paths = self._run_folders.create_run_folder(tool_name)
-            prepared_paths = self._run_folders.copy_sources(run_paths, sources)
-            spec = WorkerRunSpec(
-                tool_name=tool_name,
-                question=question,
-                source_entries=sources,
-                run_paths=run_paths,
-                analysis_goal=analysis_goal,
-            )
-            prompt = self._prompt_service.build_prompt(spec, prepared_paths)
+            with _progress_phase(progress_callback, "create run folder"):
+                run_paths = self._run_folders.create_run_folder(tool_name)
+            with _progress_phase(progress_callback, "copy sources / extract PDFs"):
+                prepared_paths = self._run_folders.copy_sources(run_paths, sources)
+            with _progress_phase(progress_callback, "build worker prompt"):
+                spec = WorkerRunSpec(
+                    tool_name=tool_name,
+                    question=question,
+                    source_entries=sources,
+                    run_paths=run_paths,
+                    analysis_goal=analysis_goal,
+                )
+                prompt = self._prompt_service.build_prompt(spec, prepared_paths)
+                _write_worker_prompt_trace(run_paths, prompt)
             started_at = datetime.now(timezone.utc)
-            runner_result = self._runner.run(run_paths, prompt)
-            return self._artifact_service.collect(run_paths, tool_name, sources, runner_result, started_at)
+            with _progress_phase(progress_callback, "Docker worker run"):
+                runner_result = self._runner.run(run_paths, prompt, progress_callback)
+            with _progress_phase(progress_callback, "collect artifacts"):
+                return self._artifact_service.collect(run_paths, tool_name, sources, runner_result, started_at)
         except (ApprovedSourceError, ToolDispatchError, ValueError) as exc:
             return self.tool_safety_error(str(exc))
+
+
+@contextmanager
+def _progress_phase(progress_callback: ProgressCallback | None, phase: str) -> Iterator[None]:
+    _emit_progress(progress_callback, phase, "start")
+    try:
+        yield
+    finally:
+        _emit_progress(progress_callback, phase, "end")
+
+
+def _emit_progress(
+    progress_callback: ProgressCallback | None,
+    phase: str,
+    event: str,
+    data: dict[str, Any] | None = None,
+) -> None:
+    if progress_callback is not None:
+        progress_callback(phase, event, data)
+
+
+def _write_worker_prompt_trace(run_paths: RunPaths, prompt: str) -> None:
+    run_paths.logs_dir.mkdir(parents=True, exist_ok=True)
+    (run_paths.logs_dir / "worker_prompt.md").write_text(prompt, encoding="utf-8")
 
 
 def _parse_tool_call(tool_call: dict[str, Any]) -> tuple[ToolName, dict[str, Any]]:

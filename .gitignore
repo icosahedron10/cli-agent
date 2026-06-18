@@ -4,6 +4,7 @@ __pycache__/
 .ruff_cache/
 .venv/
 *.pyc
+*.log
 python-agent-runs/
 5e PHB/
 .streamlit/secrets.toml

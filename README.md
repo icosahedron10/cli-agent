@@ -380,3 +380,19 @@ Run the test suite from the repository root:
 poetry install
 poetry run pytest
 ```
+
+## Next.js Frontend PoC
+
+The `frontend/` directory contains a barebones Next.js UI intended for Vercel preview deployments.
+It does not replace the Python/Docker runtime. Start the Python HTTP wrapper from this repository,
+then run the frontend separately:
+
+```bash
+poetry run cli-agent-http
+cd frontend
+npm install
+npm run dev
+```
+
+Set `NEXT_PUBLIC_BACKEND_URL` in Vercel to the externally reachable Python HTTP API URL, and use
+`frontend/` as the Vercel project root.

@@ -24,7 +24,7 @@ class FakeRunner:
         self.answer = answer or "Answer with citation (dnd5e_hp_reference.md: Section Paladin)."
         self.calls: list[tuple[RunPaths, str]] = []
 
-    def run(self, run_paths: RunPaths, prompt: str) -> RunnerResult:
+    def run(self, run_paths: RunPaths, prompt: str, progress_callback: Any | None = None) -> RunnerResult:
         self.calls.append((run_paths, prompt))
         if self.mode == "success":
             (run_paths.output_dir / "answer.md").write_text(self.answer, encoding="utf-8")
