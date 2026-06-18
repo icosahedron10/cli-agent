@@ -393,7 +393,12 @@ def _file_reference(settings: AppSettings, run_id: str, path: Path, kind: str) -
 
 
 def _artifact_path_from_id(settings: AppSettings, run_id: str, file_id: str) -> Path:
+    runs_root_resolved = settings.runs_root.resolve()
     run_root = (settings.runs_root / run_id).resolve()
+    try:
+        run_root.relative_to(runs_root_resolved)
+    except ValueError as exc:
+        raise ApiError(HTTPStatus.FORBIDDEN, "Run id is outside the runs folder") from exc
     if not run_root.exists() or not run_root.is_dir():
         raise ApiError(HTTPStatus.NOT_FOUND, "Run folder does not exist")
     relative = Path(_decode_file_id(file_id))
