@@ -84,6 +84,205 @@ The MCP server exposes the same `source_search` and `auto_analysis` tools as the
 harness. Tool schemas are generated from `settings/approved_sources.json`, so clients must pass
 exact approved source path strings.
 
+## Implementation Guide
+
+This proof of concept assumes a stable environment where a general agent runs against a vLLM-hosted
+Qwen model and receives `cli-agent` as an MCP stdio tool server. In that topology, the general
+agent owns the conversation and tool selection. `cli-agent` owns approved-source validation,
+isolated worker execution, and returning structured tool results.
+
+Target runtime shape:
+
+```text
+general agent
+  -> vLLM OpenAI-compatible API on host: http://localhost:8000/v1
+  -> MCP stdio subprocess: poetry run cli-agent-mcp
+       -> approved source validation
+       -> Docker worker container
+            -> Copilot CLI
+            -> vLLM from Docker: http://host.docker.internal:8000/v1
+```
+
+### 1. Prepare the model server
+
+Run vLLM with the same served model name that `cli-agent` and the general agent will send in chat
+completion payloads:
+
+```powershell
+vllm serve Qwen3.6-27B --host 0.0.0.0 --port 8000
+```
+
+Confirm the model server is reachable from the host:
+
+```powershell
+Invoke-RestMethod http://localhost:8000/v1/models
+```
+
+Confirm Docker containers can reach the same server:
+
+```powershell
+docker run --rm curlimages/curl:latest http://host.docker.internal:8000/v1/models
+```
+
+If the Docker check fails, fix host firewall, Docker Desktop networking, or the vLLM bind address
+before testing `cli-agent`. The worker cannot complete tool runs unless this path works.
+
+### 2. Install the app and build the worker
+
+Install Python dependencies and build the local worker image:
+
+```powershell
+poetry install
+docker build -t cli-agent-worker:local worker
+```
+
+The worker image contains the Copilot CLI and runs with the containment settings described below.
+Rebuild it after changing `worker/Dockerfile` or when refreshing the Copilot CLI version.
+
+### 3. Configure the environment
+
+Set these variables in the same process environment that will launch `cli-agent-mcp`:
+
+```powershell
+$env:CLI_AGENT_CHAT_BASE_URL="http://localhost:8000/v1"
+$env:CLI_AGENT_CHAT_MODEL="Qwen3.6-27B"
+$env:CLI_AGENT_CHAT_API_KEY="not-needed"
+$env:COPILOT_PROVIDER_BASE_URL="http://host.docker.internal:8000/v1"
+$env:COPILOT_MODEL="Qwen3.6-27B"
+$env:COPILOT_OFFLINE="true"
+```
+
+The MCP path does not normally use `CLI_AGENT_CHAT_BASE_URL` directly, because the general agent
+owns the outer chat loop. Keeping the controller and worker variables aligned still matters for
+Streamlit smoke tests and for any code path that uses the bundled chat controller.
+
+Use these optional variables when the environment requires them:
+
+- `CLI_AGENT_APPROVED_SOURCES_PATH`: point at a non-default approved-source manifest.
+- `CLI_AGENT_DOCKER_NETWORK`: attach workers to a preconfigured Docker network.
+- `COPILOT_PROVIDER_API_KEY`: pass a provider token to the worker only when required.
+- `CLI_AGENT_RUNS_ROOT`: move run folders outside `python-agent-runs/`.
+
+### 4. Define approved sources
+
+`cli-agent` never lets the model pass arbitrary file paths. Every source path must be listed in the
+approved-source manifest and must be repo-relative:
+
+```json
+{
+  "sources": [
+    {
+      "path": "sample_sources/dnd5e_hp_reference.md",
+      "label": "D&D 5e HP quick reference",
+      "description": "Small demo source for hit point calculations and ambiguity checks."
+    }
+  ]
+}
+```
+
+For a PDF corpus, prefer chapter-level files. Large monolithic PDFs are slower, harder to inspect,
+and may exceed default source-size limits. Generate a local manifest from PDFs with:
+
+```powershell
+poetry run python scripts\build_approved_sources.py --corpus "5e PHB\chapters" --output settings\approved_sources.5e_phb.local.json
+$env:CLI_AGENT_APPROVED_SOURCES_PATH="settings\approved_sources.5e_phb.local.json"
+```
+
+### 5. Register the MCP server with the agent
+
+Configure the general agent to launch `cli-agent` as a stdio MCP server from the repository root.
+Exact configuration syntax depends on the host agent, but the required shape is:
+
+```json
+{
+  "mcpServers": {
+    "cli-agent": {
+      "command": "poetry",
+      "args": ["run", "cli-agent-mcp"],
+      "cwd": "C:\\Users\\madse\\Documents\\cli-agent",
+      "env": {
+        "CLI_AGENT_APPROVED_SOURCES_PATH": "settings\\approved_sources.json",
+        "COPILOT_PROVIDER_BASE_URL": "http://host.docker.internal:8000/v1",
+        "COPILOT_MODEL": "Qwen3.6-27B",
+        "COPILOT_OFFLINE": "true"
+      }
+    }
+  }
+}
+```
+
+After registration, the agent should see two tools:
+
+- `source_search`: source-backed lookup only, with citations from approved files.
+- `auto_analysis`: source-backed analysis or calculation, with an optional markdown report and
+  artifacts.
+
+Both tools require `question` and `source_paths`. `source_paths` must contain exact strings from
+the manifest. `auto_analysis` may also receive `analysis_goal` for a concise statement of the
+expected output.
+
+Example `source_search` arguments:
+
+```json
+{
+  "question": "What hit point rule applies after level 1?",
+  "source_paths": ["sample_sources/dnd5e_hp_reference.md"]
+}
+```
+
+Example `auto_analysis` arguments:
+
+```json
+{
+  "question": "Calculate expected level 5 paladin hit points with a Constitution modifier of +2 using fixed increases.",
+  "source_paths": ["sample_sources/dnd5e_hp_reference.md"],
+  "analysis_goal": "Return the calculated hit point total and cite the rule used."
+}
+```
+
+### 6. Smoke test the proof of concept
+
+Use this sequence to verify the integration end to end:
+
+1. `Invoke-RestMethod http://localhost:8000/v1/models` returns the Qwen served model.
+2. `docker run --rm curlimages/curl:latest http://host.docker.internal:8000/v1/models` works.
+3. `poetry run pytest` passes.
+4. `poetry run cli-agent-mcp` starts without an approved-source or environment error.
+5. The host agent lists `source_search` and `auto_analysis`.
+6. A `source_search` call returns a JSON tool result with `status: "success"`, a `run_id`, and
+   cited markdown.
+7. A failed request for an unapproved path returns an error before Docker starts.
+8. A successful run creates `python-agent-runs/<run_id>/output/answer.md` and
+   `python-agent-runs/<run_id>/output/manifest.json`.
+
+### 7. Expected outputs and debugging
+
+Each MCP tool result is returned as JSON text. The important fields are:
+
+- `status`: `success`, `error`, `needs_clarification`, `timeout`, or `capacity_exceeded`.
+- `run_id`: folder name under `python-agent-runs/` when a worker run was created.
+- `report_markdown`: the worker's answer or report.
+- `artifact_paths`: generated files such as CSVs or graphs.
+- `citation_summary`: approved source paths cited by the result.
+- `error`: failure text when the run did not succeed.
+
+When a run fails, inspect:
+
+- `python-agent-runs/<run_id>/output/manifest.json` for source sizes and run metadata.
+- `python-agent-runs/<run_id>/output/logs/copilot.stderr.log` for worker startup or provider
+  errors.
+- `python-agent-runs/<run_id>/output/logs/copilot.stdout.log` for Copilot CLI output.
+
+Common setup failures:
+
+- The MCP server starts but tools are missing: the approved-source manifest is empty or invalid.
+- Tool calls fail before Docker starts: `source_paths` do not exactly match manifest paths, or
+  source-size limits are exceeded.
+- Docker starts but the worker cannot answer: `host.docker.internal:8000` is unreachable from the
+  container, `COPILOT_MODEL` does not match the served vLLM model, or provider auth is required.
+- Runs return `capacity_exceeded`: increase `CLI_AGENT_MAX_CONCURRENT_WORKER_RUNS`, increase
+  `CLI_AGENT_WORKER_QUEUE_TIMEOUT_SECONDS`, or reduce concurrent tool calls from the host agent.
+
 ## Approved Sources
 
 The model can only request exact strings from `settings/approved_sources.json`. The dispatcher rejects any path not on that shortlist before Docker starts.
