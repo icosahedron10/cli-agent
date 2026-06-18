@@ -8,6 +8,10 @@ from cli_agent.exceptions import SettingsError
 from cli_agent.models import AppSettings
 
 
+TRUE_ENV_VALUES = {"1", "true", "yes", "on"}
+FALSE_ENV_VALUES = {"0", "false", "no", "off"}
+
+
 def load_app_settings(repo_root: Path | None = None) -> AppSettings:
     root = (repo_root or Path.cwd()).resolve()
     approved_sources_path = Path(
@@ -31,7 +35,7 @@ def load_app_settings(repo_root: Path | None = None) -> AppSettings:
 
     chat_base_url = os.getenv("CLI_AGENT_CHAT_BASE_URL", "http://localhost:11434/v1").rstrip("/")
     chat_model = os.getenv("CLI_AGENT_CHAT_MODEL", "llama3.2")
-    copilot_base_url = os.getenv("COPILOT_PROVIDER_BASE_URL", "http://host.docker.internal:11434")
+    copilot_base_url = os.getenv("COPILOT_PROVIDER_BASE_URL", "http://host.docker.internal:8000/v1")
     copilot_model = os.getenv("COPILOT_MODEL", chat_model)
 
     return AppSettings(
@@ -99,4 +103,10 @@ def _read_bool_env(name: str, default: bool) -> bool:
     value = os.getenv(name)
     if value is None:
         return default
-    return value.strip().lower() in {"1", "true", "yes", "on"}
+    normalized = value.strip().lower()
+    if normalized in TRUE_ENV_VALUES:
+        return True
+    if normalized in FALSE_ENV_VALUES:
+        return False
+    allowed_values = sorted(TRUE_ENV_VALUES | FALSE_ENV_VALUES)
+    raise SettingsError(f"{name} must be one of: {', '.join(allowed_values)}")

@@ -31,10 +31,17 @@ $env:CLI_AGENT_CHAT_API_KEY="not-needed"
 Set the Copilot CLI worker provider:
 
 ```powershell
-$env:COPILOT_PROVIDER_BASE_URL="http://host.docker.internal:11434"
-$env:COPILOT_MODEL="llama3.2"
+$env:COPILOT_PROVIDER_BASE_URL="http://host.docker.internal:8000/v1"
+$env:COPILOT_MODEL="your-worker-model"
 $env:COPILOT_OFFLINE="true"
 ```
+
+`COPILOT_OFFLINE=true` is the default and is intended to avoid GitHub auth/server contact. It is
+not required for BYOK; override it only when your worker provider setup requires online Copilot
+behavior. `CLI_AGENT_DOCKER_NETWORK` is passed directly to Docker as `--network` when set. Use it
+with a preconfigured Docker network or external policy when the worker needs constrained provider
+reachability, and verify allowed and blocked egress outside this process before trusting that
+profile.
 
 Build the worker image once:
 
@@ -107,6 +114,8 @@ Default limits:
 | `CLI_AGENT_MAX_SOURCES_PER_RUN` | `4` | Maximum approved source files copied into one run. |
 | `CLI_AGENT_MAX_SOURCE_BYTES` | `33554432` | Maximum bytes for one requested source, 32 MiB by default. |
 | `CLI_AGENT_MAX_TOTAL_SOURCE_BYTES_PER_RUN` | `67108864` | Maximum total requested source bytes, 64 MiB by default. |
+| `CLI_AGENT_DOCKER_NETWORK` | unset | Optional Docker `--network` value for worker containers. |
+| `COPILOT_OFFLINE` | `true` | Whether the worker should avoid online provider access. |
 
 Each manifest records selected source byte sizes and whether the worker timed out or hit capacity.
 

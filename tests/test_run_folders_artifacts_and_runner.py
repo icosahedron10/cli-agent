@@ -132,16 +132,37 @@ def test_docker_runner_builds_command_with_env_and_mount(app_settings) -> None:
     command = DockerRunner(app_settings).build_command(run_paths, "hello")
 
     assert command[:3] == ["docker", "run", "--rm"]
+    assert "--init" in command
+    assert "--cap-drop=ALL" in command
+    assert "--security-opt=no-new-privileges" in command
+    assert "--read-only" in command
+    assert "--tmpfs" in command
+    assert "/tmp:rw,nosuid,nodev,size=64m" in command
+    assert "--pids-limit=256" in command
+    assert "--network" not in command
     assert "-e" in command
     assert "COPILOT_OFFLINE=true" in command
-    assert "COPILOT_PROVIDER_BASE_URL=http://host.docker.internal:11434" in command
+    assert "COPILOT_PROVIDER_BASE_URL=http://host.docker.internal:8000/v1" in command
     assert "COPILOT_MODEL=test-copilot-model" in command
+    assert "HOME=/workspace/work/home" in command
+    assert "XDG_CACHE_HOME=/workspace/work/cache" in command
+    assert "XDG_CONFIG_HOME=/workspace/work/config" in command
     assert "COPILOT_OTEL_ENABLED=false" in command
     assert "COPILOT_ALLOW_ALL=true" not in command
     assert f"{run_paths.root}:/workspace" in command
     assert "--prompt" in command
     assert "hello" in command
     assert "--allow-all-tools" in command
+
+
+def test_docker_runner_uses_configured_network(app_settings) -> None:
+    settings = replace(app_settings, docker_network="cli-agent-firewalled")
+    run_paths = RunFolderService(settings).create_run_folder(ToolName.SOURCE_SEARCH)
+    command = DockerRunner(settings).build_command(run_paths, "hello")
+
+    assert command[:3] == ["docker", "run", "--rm"]
+    network_index = command.index("--network")
+    assert command[network_index : network_index + 2] == ["--network", "cli-agent-firewalled"]
 
 
 def test_docker_runner_writes_logs_and_handles_nonzero(app_settings, monkeypatch) -> None:
