@@ -7,9 +7,13 @@ packages = [{ include = "cli_agent" }]
 
 [tool.poetry.dependencies]
 python = ">=3.11,<4.0"
+mcp = ">=1.27,<2"
 pypdf = ">=4.0"
 requests = ">=2.31"
 streamlit = ">=1.36"
+
+[tool.poetry.scripts]
+cli-agent-mcp = "cli_agent.mcp_server:main"
 
 [tool.poetry.group.dev.dependencies]
 pytest = ">=8.0"
