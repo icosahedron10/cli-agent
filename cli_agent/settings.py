@@ -10,6 +10,9 @@ from cli_agent.models import AppSettings
 
 TRUE_ENV_VALUES = {"1", "true", "yes", "on"}
 FALSE_ENV_VALUES = {"0", "false", "no", "off"}
+DEFAULT_CHAT_BASE_URL = "http://localhost:8000/v1"
+DEFAULT_CHAT_MODEL = "Qwen3.6-27B"
+DEFAULT_COPILOT_PROVIDER_BASE_URL = "http://host.docker.internal:8000/v1"
 
 
 def load_app_settings(repo_root: Path | None = None) -> AppSettings:
@@ -33,9 +36,9 @@ def load_app_settings(repo_root: Path | None = None) -> AppSettings:
     chat_temperature = _read_float_env("CLI_AGENT_CHAT_TEMPERATURE", 0.0)
     chat_timeout_seconds = _read_positive_float_env("CLI_AGENT_CHAT_TIMEOUT_SECONDS", 120.0)
 
-    chat_base_url = os.getenv("CLI_AGENT_CHAT_BASE_URL", "http://localhost:11434/v1").rstrip("/")
-    chat_model = os.getenv("CLI_AGENT_CHAT_MODEL", "llama3.2")
-    copilot_base_url = os.getenv("COPILOT_PROVIDER_BASE_URL", "http://host.docker.internal:8000/v1")
+    chat_base_url = os.getenv("CLI_AGENT_CHAT_BASE_URL", DEFAULT_CHAT_BASE_URL).rstrip("/")
+    chat_model = os.getenv("CLI_AGENT_CHAT_MODEL", DEFAULT_CHAT_MODEL)
+    copilot_base_url = os.getenv("COPILOT_PROVIDER_BASE_URL", DEFAULT_COPILOT_PROVIDER_BASE_URL)
     copilot_model = os.getenv("COPILOT_MODEL", chat_model)
 
     return AppSettings(
