@@ -1,16 +1,27 @@
 # CLI Source and Auto Analysis Tool
 
-Greenfield Streamlit proof harness for exposing two Chat Completions tools to an OpenAI-compatible chat model:
+Greenfield Streamlit and MCP proof harness for exposing two Chat Completions tools to a
+Qwen model served by vLLM's OpenAI-compatible API:
 
 - `source_search`, shown in the UI as `source-search`
 - `auto_analysis`, shown in the UI as `auto-analysis`
 
-The reusable implementation lives in plain Python modules under `cli_agent/`. Streamlit only renders the temporary chat UI and artifacts.
+The reusable implementation lives in plain Python modules under `cli_agent/`. Streamlit only
+renders the temporary chat UI and artifacts.
+
+The default local topology is:
+
+- The controller calls vLLM on the host at `http://localhost:8000/v1`.
+- The Dockerized Copilot CLI worker calls the same vLLM service from inside Docker at
+  `http://host.docker.internal:8000/v1`.
+- Both paths default to `Qwen3.6-27B`; override the model environment variables if your vLLM
+  server uses a different served model name.
 
 ## Architecture
 
 - `controllers`: chat-turn orchestration and one-tool-call-per-turn enforcement.
-- `agents`: OpenAI-compatible Chat Completions client behavior.
+- `agents`: OpenAI-compatible Chat Completions client behavior for vLLM/Qwen or a compatible
+  provider.
 - `managers`: tool dispatch, argument validation, ambiguity guardrails, and worker run coordination.
 - `services`: approved-source loading, run-folder setup, Docker command execution, prompt construction, and artifact collection.
 
@@ -20,26 +31,34 @@ The reusable implementation lives in plain Python modules under `cli_agent/`. St
 poetry install
 ```
 
-Set the OpenAI-compatible chat endpoint:
+Start a vLLM OpenAI-compatible server with Qwen before launching the app. For example:
 
 ```powershell
-$env:CLI_AGENT_CHAT_BASE_URL="http://localhost:11434/v1"
-$env:CLI_AGENT_CHAT_MODEL="llama3.2"
+vllm serve Qwen3.6-27B --host 0.0.0.0 --port 8000
+```
+
+Set the controller chat endpoint:
+
+```powershell
+$env:CLI_AGENT_CHAT_BASE_URL="http://localhost:8000/v1"
+$env:CLI_AGENT_CHAT_MODEL="Qwen3.6-27B"
 $env:CLI_AGENT_CHAT_API_KEY="not-needed"
 ```
 
-Set the Copilot CLI worker provider:
+Set the Copilot CLI worker provider. The worker runs inside Docker, so `host.docker.internal`
+points back to the host vLLM process:
 
 ```powershell
 $env:COPILOT_PROVIDER_BASE_URL="http://host.docker.internal:8000/v1"
-$env:COPILOT_MODEL="your-worker-model"
+$env:COPILOT_MODEL=$env:CLI_AGENT_CHAT_MODEL
 $env:COPILOT_OFFLINE="true"
 ```
 
 `COPILOT_OFFLINE=true` is the default and is intended to avoid GitHub auth/server contact. It is
 not required for BYOK; override it only when your worker provider setup requires online Copilot
-behavior. `CLI_AGENT_DOCKER_NETWORK` is passed directly to Docker as `--network` when set. Use it
-with a preconfigured Docker network or external policy when the worker needs constrained provider
+behavior. Set `COPILOT_PROVIDER_API_KEY` only if your vLLM server or replacement provider requires
+one. `CLI_AGENT_DOCKER_NETWORK` is passed directly to Docker as `--network` when set. Use it with a
+preconfigured Docker network or external policy when the worker needs constrained provider
 reachability, and verify allowed and blocked egress outside this process before trusting that
 profile.
 
@@ -113,16 +132,25 @@ kept in `st.session_state`, run folders use UUID-based names, and the cached con
 store per-user conversation state. Expensive worker execution is capped by a process-local
 semaphore before Docker starts.
 
-Default limits:
+Important environment settings:
 
 | Setting | Default | Purpose |
 | --- | ---: | --- |
+| `CLI_AGENT_CHAT_BASE_URL` | `http://localhost:8000/v1` | OpenAI-compatible vLLM endpoint used by the controller chat model. |
+| `CLI_AGENT_CHAT_MODEL` | `Qwen3.6-27B` | Qwen served model name sent to the controller chat endpoint. |
+| `CLI_AGENT_CHAT_API_KEY` | `not-needed` | Bearer token sent to the chat endpoint. Use a real value if your provider requires one. |
+| `CLI_AGENT_CHAT_TEMPERATURE` | `0.0` | Temperature for controller chat completions. |
+| `CLI_AGENT_CHAT_TIMEOUT_SECONDS` | `120` | Maximum wait for each OpenAI-compatible chat completion call. |
 | `COPILOT_PROVIDER_BASE_URL` | `http://host.docker.internal:8000/v1` | OpenAI-compatible worker provider base URL visible from Docker. |
+| `COPILOT_MODEL` | `CLI_AGENT_CHAT_MODEL` | Model name passed to the Copilot CLI worker provider. |
+| `COPILOT_PROVIDER_API_KEY` | unset | Optional bearer token for the worker provider. |
 | `COPILOT_OFFLINE` | `true` | Whether Copilot CLI should avoid GitHub auth/server contact by default. |
+| `CLI_AGENT_APPROVED_SOURCES_PATH` | `settings/approved_sources.json` | Approved-source settings file. |
+| `CLI_AGENT_RUNS_ROOT` | `python-agent-runs/` | Root directory for per-tool run folders. |
+| `CLI_AGENT_WORKER_IMAGE` | `cli-agent-worker:local` | Docker image used for worker runs. |
 | `CLI_AGENT_MAX_CONCURRENT_WORKER_RUNS` | `2` | Maximum concurrent Docker worker runs per app process. |
 | `CLI_AGENT_WORKER_QUEUE_TIMEOUT_SECONDS` | `30` | How long a request waits for a worker slot before returning `capacity_exceeded`. |
 | `CLI_AGENT_WORKER_TIMEOUT_SECONDS` | `180` | Maximum runtime for a single worker container. |
-| `CLI_AGENT_CHAT_TIMEOUT_SECONDS` | `120` | Maximum wait for each OpenAI-compatible chat completion call. |
 | `CLI_AGENT_MAX_SOURCES_PER_RUN` | `4` | Maximum approved source files copied into one run. |
 | `CLI_AGENT_MAX_SOURCE_BYTES` | `33554432` | Maximum bytes for one requested source, 32 MiB by default. |
 | `CLI_AGENT_MAX_TOTAL_SOURCE_BYTES_PER_RUN` | `67108864` | Maximum total requested source bytes, 64 MiB by default. |
@@ -150,6 +178,9 @@ check both provider reachability and blocked disallowed egress before relying on
 - There is no retrieval index or PDF text cache. Each accepted tool run copies the requested files
   into an isolated run folder and asks the worker to inspect them, so large PDFs cost disk, time,
   and model context on every run.
+- vLLM is an external dependency. This app does not launch the model server, reserve GPU capacity,
+  check model health, or verify that `CLI_AGENT_CHAT_MODEL` and `COPILOT_MODEL` match the served
+  model names.
 - PDF support depends on extractable embedded text through `pypdf`. Scanned/image-only PDFs fail
   before worker execution instead of producing guessed answers. Layout-heavy tables may still need
   manual validation.

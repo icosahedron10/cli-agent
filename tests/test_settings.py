@@ -9,7 +9,10 @@ from cli_agent.settings import load_app_settings
 def test_load_app_settings_uses_v1_worker_provider_default(tmp_path) -> None:
     settings = load_app_settings(tmp_path)
 
+    assert settings.chat_base_url == "http://localhost:8000/v1"
+    assert settings.chat_model == "Qwen3.6-27B"
     assert settings.copilot_provider_base_url == "http://host.docker.internal:8000/v1"
+    assert settings.copilot_model == settings.chat_model
 
 
 @pytest.mark.parametrize(
