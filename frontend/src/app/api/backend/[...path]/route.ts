@@ -49,13 +49,7 @@ async function proxyBackendRequest(request: NextRequest, context: RouteContext):
     });
   } catch (error) {
     console.error("Backend proxy request failed", { target: target.toString(), error });
-    return Response.json(
-      {
-        error: "Backend request failed",
-        details: errorMessage(error),
-      },
-      { status: 502 },
-    );
+    return Response.json({ error: "Backend request failed" }, { status: 502 });
   }
 
   return new Response(response.body, {
@@ -88,16 +82,11 @@ function backendRequestHeaders(request: NextRequest): Headers {
   if (token) {
     headers.set("authorization", `Bearer ${token}`);
   }
-  headers.set("ngrok-skip-browser-warning", "true");
+  if (process.env.CLI_AGENT_BACKEND_NGROK === "true") {
+    headers.set("ngrok-skip-browser-warning", "true");
+  }
 
   return headers;
-}
-
-function errorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-  return "Unknown backend connection error";
 }
 
 function responseHeaders(response: Response): Headers {

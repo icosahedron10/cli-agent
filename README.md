@@ -399,5 +399,11 @@ npm run dev
 The frontend defaults to a same-origin proxy at `/api/backend`. For a Vercel demo, set
 `CLI_AGENT_BACKEND_URL` to the externally reachable Python HTTP API URL, such as an ngrok URL, and
 set `CLI_AGENT_BACKEND_BEARER_TOKEN` to match `CLI_AGENT_HTTP_BEARER_TOKEN` when the Python API token
-is enabled. Leave `NEXT_PUBLIC_BACKEND_URL` unset unless you intentionally want browser-direct API
-requests. Use `frontend/` as the Vercel project root.
+is enabled. If the backend is behind ngrok, set `CLI_AGENT_BACKEND_NGROK=true` so the proxy sends
+ngrok's browser-warning bypass header. Leave `NEXT_PUBLIC_BACKEND_URL` unset unless you intentionally
+want browser-direct API requests. Use `frontend/` as the Vercel project root.
+
+The frontend proxy does not authenticate Vercel visitors. `CLI_AGENT_BACKEND_BEARER_TOKEN` keeps the
+backend URL and token server-side and blocks direct unauthenticated calls to the Python API, but any
+visitor who can reach the Vercel deployment can still use the proxy to start chat jobs and read run
+results.
