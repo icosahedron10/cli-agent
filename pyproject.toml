@@ -14,6 +14,7 @@ streamlit = ">=1.36"
 
 [tool.poetry.scripts]
 cli-agent-mcp = "cli_agent.mcp_server:main"
+cli-agent-http = "cli_agent.http_api:main"
 
 [tool.poetry.group.dev.dependencies]
 pytest = ">=8.0"

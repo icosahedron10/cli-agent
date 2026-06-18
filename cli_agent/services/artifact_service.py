@@ -31,6 +31,7 @@ class ArtifactService:
         needs_path = run_paths.output_dir / NEEDS_CLARIFICATION_FILENAME
         report_markdown = _read_text_if_exists(answer_path)
         artifacts = _collect_optional_artifacts(run_paths.output_dir)
+        trace_paths = _collect_trace_paths(run_paths)
 
         if runner_result.capacity_exceeded:
             envelope = ToolEnvelope(
@@ -39,6 +40,7 @@ class ArtifactService:
                 report_markdown=report_markdown,
                 artifact_paths=_string_paths(artifacts),
                 citation_summary=[],
+                trace_paths=trace_paths,
                 error=runner_result.stderr or "Worker capacity exceeded.",
             )
         elif runner_result.timed_out:
@@ -48,6 +50,7 @@ class ArtifactService:
                 report_markdown=report_markdown,
                 artifact_paths=_string_paths(artifacts),
                 citation_summary=[],
+                trace_paths=trace_paths,
                 error="Worker timed out before completing.",
             )
         elif runner_result.exit_code != 0:
@@ -57,6 +60,7 @@ class ArtifactService:
                 report_markdown=report_markdown,
                 artifact_paths=_string_paths(artifacts),
                 citation_summary=[],
+                trace_paths=trace_paths,
                 error=_runner_error_message(runner_result),
             )
         elif needs_path.exists():
@@ -67,6 +71,7 @@ class ArtifactService:
                 report_markdown=report_markdown,
                 artifact_paths=_string_paths(artifacts),
                 citation_summary=_citation_summary(report_markdown, sources),
+                trace_paths=trace_paths,
                 needs_clarification=needs_clarification,
             )
         elif not answer_path.exists():
@@ -76,6 +81,7 @@ class ArtifactService:
                 report_markdown="",
                 artifact_paths=_string_paths(artifacts),
                 citation_summary=[],
+                trace_paths=trace_paths,
                 error="Worker completed but did not create output/answer.md.",
             )
         else:
@@ -85,6 +91,7 @@ class ArtifactService:
                 report_markdown=report_markdown,
                 artifact_paths=_string_paths(artifacts),
                 citation_summary=_citation_summary(report_markdown, sources),
+                trace_paths=trace_paths,
             )
 
         _write_manifest(
@@ -116,6 +123,18 @@ def _collect_optional_artifacts(output_dir: Path) -> list[Path]:
 
 def _string_paths(paths: list[Path]) -> list[str]:
     return [str(path.resolve()) for path in paths]
+
+
+def _collect_trace_paths(run_paths: RunPaths) -> list[str]:
+    trace_paths: list[Path] = []
+    trace_paths.extend(sorted(run_paths.logs_dir.glob("*.json")))
+    trace_paths.extend(sorted(run_paths.logs_dir.glob("*.log")))
+    trace_paths.extend(sorted(run_paths.logs_dir.glob("worker_prompt.md")))
+    copilot_home = run_paths.work_dir / "copilot-home"
+    trace_paths.extend(sorted((copilot_home / "logs").glob("*.log")))
+    trace_paths.extend(sorted((copilot_home / "session-state").glob("*/events.jsonl")))
+    trace_paths.extend(sorted((copilot_home / "session-state").glob("*/workspace.yaml")))
+    return _string_paths(trace_paths)
 
 
 def _citation_summary(report_markdown: str, sources: list[SourceEntry]) -> list[str]:
@@ -170,6 +189,7 @@ def _write_manifest(
         "source_bytes": {source.path: source.size_bytes for source in sources},
         "artifacts": envelope.artifact_paths,
         "citation_summary": envelope.citation_summary,
+        "trace_paths": envelope.trace_paths,
         "runner_exit_code": runner_result.exit_code,
         "runner_timed_out": runner_result.timed_out,
         "runner_capacity_exceeded": runner_result.capacity_exceeded,

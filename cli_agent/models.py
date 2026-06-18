@@ -38,6 +38,7 @@ class AppSettings:
     chat_model: str
     chat_temperature: float
     chat_timeout_seconds: float
+    max_api_jobs: int
     worker_image: str
     worker_timeout_seconds: int
     worker_queue_timeout_seconds: float
@@ -100,6 +101,7 @@ class ToolEnvelope:
     report_markdown: str
     artifact_paths: list[str]
     citation_summary: list[str]
+    trace_paths: list[str] = field(default_factory=list)
     needs_clarification: NeedsClarification | None = None
     error: str | None = None
 
@@ -110,6 +112,7 @@ class ToolEnvelope:
             "report_markdown": self.report_markdown,
             "artifact_paths": self.artifact_paths,
             "citation_summary": self.citation_summary,
+            "trace_paths": self.trace_paths,
         }
         if self.needs_clarification is not None:
             payload["needs_clarification"] = {

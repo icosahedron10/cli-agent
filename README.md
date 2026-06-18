@@ -311,6 +311,7 @@ place before exposing the tool to sustained traffic.
 | `CLI_AGENT_CHAT_API_KEY` | `not-needed` | Bearer token for bundled chat-controller paths. |
 | `CLI_AGENT_CHAT_TEMPERATURE` | `0.0` | Temperature for bundled chat-controller completions. |
 | `CLI_AGENT_CHAT_TIMEOUT_SECONDS` | `120` | Maximum wait for each bundled chat-controller completion call. |
+| `CLI_AGENT_MAX_API_JOBS` | `100` | Maximum retained HTTP chat jobs. |
 
 ---
 
@@ -380,3 +381,19 @@ Run the test suite from the repository root:
 poetry install
 poetry run pytest
 ```
+
+## Next.js Frontend PoC
+
+The `frontend/` directory contains a barebones Next.js UI intended for Vercel preview deployments.
+It does not replace the Python/Docker runtime. Start the Python HTTP wrapper from this repository,
+then run the frontend separately:
+
+```bash
+poetry run cli-agent-http
+cd frontend
+npm install
+npm run dev
+```
+
+Set `NEXT_PUBLIC_BACKEND_URL` in Vercel to the externally reachable Python HTTP API URL, and use
+`frontend/` as the Vercel project root.

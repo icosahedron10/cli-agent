@@ -169,6 +169,8 @@ def test_docker_runner_writes_logs_and_handles_nonzero(app_settings, monkeypatch
     run_paths = RunFolderService(app_settings).create_run_folder(ToolName.SOURCE_SEARCH)
 
     def fake_run(*args, **kwargs):
+        assert kwargs["encoding"] == "utf-8"
+        assert kwargs["errors"] == "replace"
         return subprocess.CompletedProcess(args[0], 5, stdout="out", stderr="err")
 
     monkeypatch.setattr(subprocess, "run", fake_run)
@@ -177,6 +179,56 @@ def test_docker_runner_writes_logs_and_handles_nonzero(app_settings, monkeypatch
     assert result.exit_code == 5
     assert (run_paths.logs_dir / "copilot.stdout.log").read_text(encoding="utf-8") == "out"
     assert (run_paths.logs_dir / "copilot.stderr.log").read_text(encoding="utf-8") == "err"
+
+
+def test_docker_runner_reports_worker_diagnostics(app_settings, monkeypatch) -> None:
+    run_paths = RunFolderService(app_settings).create_run_folder(ToolName.SOURCE_SEARCH)
+    progress_events: list[tuple[str, str, dict | None]] = []
+
+    def fake_run(*args, **kwargs):
+        copilot_log_dir = run_paths.work_dir / "copilot-home" / "logs"
+        copilot_log_dir.mkdir(parents=True)
+        (copilot_log_dir / "process.log").write_text(
+            "\n".join(
+                [
+                    "2026-06-18T10:00:00.000Z --- Start of group: Sending request to the AI model ---",
+                    "2026-06-18T10:00:04.500Z --- End of group ---",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        return subprocess.CompletedProcess(
+            args[0],
+            0,
+            stdout="",
+            stderr="Package extraction took 11265ms\n",
+        )
+
+    def record_progress(phase: str, event: str, data: dict | None = None) -> None:
+        progress_events.append((phase, event, data))
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = DockerRunner(app_settings).run(run_paths, "prompt", record_progress)
+
+    assert result.exit_code == 0
+    diagnostics = json.loads((run_paths.logs_dir / "worker_diagnostics.json").read_text(encoding="utf-8"))
+    assert diagnostics["package_extraction_seconds"] == 11.265
+    assert diagnostics["model_request_count"] == 1
+    assert diagnostics["model_requests_total_seconds"] == 4.5
+
+    duration_events = {
+        phase: data for phase, event, data in progress_events if event == "duration" and data is not None
+    }
+    assert duration_events["Docker image build/pull"]["status"] == "not run"
+    assert duration_events["Copilot package extraction/cache"]["seconds"] == 11.265
+    assert duration_events["Copilot model requests total"]["seconds"] == 4.5
+    assert ("Copilot model request", "start") in {
+        (phase, event) for phase, event, _data in progress_events
+    }
+    assert ("Copilot model request", "end") in {
+        (phase, event) for phase, event, _data in progress_events
+    }
 
 
 def test_docker_runner_handles_timeout(app_settings, monkeypatch) -> None:
