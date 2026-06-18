@@ -4,7 +4,7 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
-from cli_agent.constants import API_TOOL_AUTO_ANALYSIS, API_TOOL_SOURCE_SEARCH
+from cli_agent.constants import API_TOOL_AUTO_ANALYSIS, API_TOOL_SOURCE_SEARCH, MAX_ANALYSIS_GOAL_LENGTH
 from cli_agent.exceptions import ApprovedSourceError, ToolDispatchError
 from cli_agent.models import (
     NeedsClarification,
@@ -65,7 +65,6 @@ class ToolManager:
 
     def run_tool(self, tool_name: ToolName, args: dict[str, Any]) -> ToolEnvelope:
         try:
-            tool_name = _normalize_tool_name(tool_name)
             _validate_argument_keys(tool_name, args)
             question = _required_string(args, "question")
             analysis_goal = _optional_string(args, "analysis_goal")
@@ -122,12 +121,6 @@ def _parse_tool_call(tool_call: dict[str, Any]) -> tuple[ToolName, dict[str, Any
     return ToolName(name), args
 
 
-def _normalize_tool_name(tool_name: ToolName) -> ToolName:
-    if isinstance(tool_name, ToolName):
-        return tool_name
-    raise ToolDispatchError(f"Unknown tool requested: {tool_name}")
-
-
 def _validate_argument_keys(tool_name: ToolName, args: dict[str, Any]) -> None:
     if not isinstance(args, dict):
         raise ToolDispatchError("Tool arguments must be an object")
@@ -154,7 +147,18 @@ def _optional_string(args: dict[str, Any], key: str) -> str | None:
     value = args[key]
     if not isinstance(value, str) or not value.strip():
         raise ToolDispatchError(f"{key} must be a non-empty string when provided")
-    return value.strip()
+    cleaned = value.strip()
+    if key == "analysis_goal":
+        _validate_analysis_goal(value)
+    return cleaned
+
+
+def _validate_analysis_goal(value: str) -> None:
+    if len(value.strip()) > MAX_ANALYSIS_GOAL_LENGTH:
+        raise ToolDispatchError(f"analysis_goal must be {MAX_ANALYSIS_GOAL_LENGTH} characters or fewer")
+    has_control_character = any(ord(character) < 32 or ord(character) == 127 for character in value)
+    if has_control_character:
+        raise ToolDispatchError("analysis_goal must be a single-line string without control characters")
 
 
 def detect_pre_run_clarification(question: str) -> NeedsClarification | None:

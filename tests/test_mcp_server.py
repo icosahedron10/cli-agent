@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import pytest
 
 from cli_agent.constants import API_TOOL_AUTO_ANALYSIS, API_TOOL_SOURCE_SEARCH
-from cli_agent.mcp_server import _mcp_tools_from_schemas, dispatch_tool_call
+from cli_agent.mcp_server import _mcp_tools_from_schemas, _tool_result_content, dispatch_tool_call
 from cli_agent.models import ToolName
 from cli_agent.schemas import build_tool_schemas
 from cli_agent.services.approved_sources import ApprovedSourceService
@@ -61,6 +62,13 @@ def test_dispatch_tool_call_invokes_subagent() -> None:
 
     assert result == {"status": "success", "tool_name": API_TOOL_SOURCE_SEARCH}
     assert subagent.calls == [(ToolName.SOURCE_SEARCH, args)]
+
+
+def test_tool_result_content_wraps_json_text_content() -> None:
+    content = _tool_result_content({"status": "success", "tool_name": API_TOOL_SOURCE_SEARCH})
+
+    assert content.type == "text"
+    assert json.loads(content.text) == {"status": "success", "tool_name": API_TOOL_SOURCE_SEARCH}
 
 
 def test_dispatch_tool_call_rejects_unknown_tool() -> None:

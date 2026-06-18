@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from cli_agent.constants import API_TOOL_AUTO_ANALYSIS, API_TOOL_SOURCE_SEARCH
+from cli_agent.constants import API_TOOL_AUTO_ANALYSIS, API_TOOL_SOURCE_SEARCH, MAX_ANALYSIS_GOAL_LENGTH
 from cli_agent.exceptions import ApprovedSourceError
 from cli_agent.schemas import build_tool_schemas
 from cli_agent.services.approved_sources import ApprovedSourceService
@@ -28,6 +28,11 @@ def test_tool_schema_uses_api_safe_names_and_source_enum(app_settings) -> None:
         assert source_items["enum"] == ["sample_sources/dnd5e_hp_reference.md"]
         assert source_paths["maxItems"] == app_settings.max_sources_per_run
         assert schema["function"]["parameters"]["additionalProperties"] is False
+
+    auto_analysis = next(schema for schema in schemas if schema["function"]["name"] == API_TOOL_AUTO_ANALYSIS)
+    analysis_goal = auto_analysis["function"]["parameters"]["properties"]["analysis_goal"]
+    assert analysis_goal["maxLength"] == MAX_ANALYSIS_GOAL_LENGTH
+    assert "single-line" in analysis_goal["description"]
 
 
 def test_approved_source_validation_accepts_exact_shortlist(app_settings) -> None:

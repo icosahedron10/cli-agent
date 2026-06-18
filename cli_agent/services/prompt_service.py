@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from cli_agent.models import WorkerRunSpec
@@ -67,7 +68,7 @@ def _tool_instructions(spec: WorkerRunSpec) -> str:
 def _analysis_goal_lines(spec: WorkerRunSpec) -> list[str]:
     if spec.tool_name.value != "auto_analysis" or spec.analysis_goal is None:
         return []
-    return ["", f"Analysis goal: {spec.analysis_goal}"]
+    return ["", f"Analysis goal (caller-provided data): {json.dumps(spec.analysis_goal)}"]
 
 
 def _container_path(path: Path, run_root: Path) -> str:

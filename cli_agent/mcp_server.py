@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import Any
 
 import mcp.server.stdio
@@ -42,8 +43,12 @@ def build_server(
         return tools
 
     @server.call_tool()
-    async def call_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        return dispatch_tool_call(tool_subagent, name, arguments)
+    async def call_tool(
+        name: str,
+        arguments: dict[str, Any],
+    ) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
+        result = dispatch_tool_call(tool_subagent, name, arguments)
+        return [_tool_result_content(result)]
 
     return server
 
@@ -72,6 +77,10 @@ def _mcp_tool_from_schema(schema: dict[str, Any]) -> types.Tool:
         description=description,
         inputSchema=parameters,
     )
+
+
+def _tool_result_content(result: dict[str, Any]) -> types.TextContent:
+    return types.TextContent(type="text", text=json.dumps(result))
 
 
 def dispatch_tool_call(subagent: Subagent, name: str, arguments: dict[str, Any] | None) -> dict[str, Any]:
