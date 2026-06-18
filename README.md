@@ -55,6 +55,16 @@ Run the Streamlit proof harness:
 poetry run streamlit run streamlit_app.py
 ```
 
+Run the MCP stdio server:
+
+```powershell
+poetry run cli-agent-mcp
+```
+
+The MCP server exposes the same `source_search` and `auto_analysis` tools as the Streamlit proof
+harness. Tool schemas are generated from `settings/approved_sources.json`, so clients must pass
+exact approved source path strings.
+
 ## Approved Sources
 
 The model can only request exact strings from `settings/approved_sources.json`. The dispatcher rejects any path not on that shortlist before Docker starts.
@@ -107,6 +117,8 @@ Default limits:
 
 | Setting | Default | Purpose |
 | --- | ---: | --- |
+| `COPILOT_PROVIDER_BASE_URL` | `http://host.docker.internal:8000/v1` | OpenAI-compatible worker provider base URL visible from Docker. |
+| `COPILOT_OFFLINE` | `true` | Whether Copilot CLI should avoid GitHub auth/server contact by default. |
 | `CLI_AGENT_MAX_CONCURRENT_WORKER_RUNS` | `2` | Maximum concurrent Docker worker runs per app process. |
 | `CLI_AGENT_WORKER_QUEUE_TIMEOUT_SECONDS` | `30` | How long a request waits for a worker slot before returning `capacity_exceeded`. |
 | `CLI_AGENT_WORKER_TIMEOUT_SECONDS` | `180` | Maximum runtime for a single worker container. |
@@ -114,10 +126,22 @@ Default limits:
 | `CLI_AGENT_MAX_SOURCES_PER_RUN` | `4` | Maximum approved source files copied into one run. |
 | `CLI_AGENT_MAX_SOURCE_BYTES` | `33554432` | Maximum bytes for one requested source, 32 MiB by default. |
 | `CLI_AGENT_MAX_TOTAL_SOURCE_BYTES_PER_RUN` | `67108864` | Maximum total requested source bytes, 64 MiB by default. |
-| `CLI_AGENT_DOCKER_NETWORK` | unset | Optional Docker `--network` value for worker containers. |
-| `COPILOT_OFFLINE` | `true` | Whether the worker should avoid online provider access. |
+| `CLI_AGENT_DOCKER_NETWORK` | unset | Optional Docker `--network` value for externally constrained worker networking. |
 
 Each manifest records selected source byte sizes and whether the worker timed out or hit capacity.
+
+## Worker Containment
+
+Worker containers run with a read-only root filesystem, no added Linux capabilities,
+`no-new-privileges`, an init process, a small writable `/tmp`, and a PID limit. Runtime homes and
+caches are redirected under `/workspace/work` so the worker can write only inside the run folder.
+The Copilot CLI invocation keeps remote/built-in MCPs disabled, restricts added directories to
+`/workspace`, and exposes only the explicit tool set required for local source inspection.
+
+Network restriction is intentionally external to the worker container. Do not grant firewall or
+network-admin privileges to this model-controlled container. For a constrained provider profile,
+create and verify the Docker network or host policy separately, set `CLI_AGENT_DOCKER_NETWORK`, and
+check both provider reachability and blocked disallowed egress before relying on that profile.
 
 ## Production Limitations
 
