@@ -312,6 +312,7 @@ place before exposing the tool to sustained traffic.
 | `CLI_AGENT_CHAT_TEMPERATURE` | `0.0` | Temperature for bundled chat-controller completions. |
 | `CLI_AGENT_CHAT_TIMEOUT_SECONDS` | `120` | Maximum wait for each bundled chat-controller completion call. |
 | `CLI_AGENT_MAX_API_JOBS` | `100` | Maximum retained HTTP chat jobs. |
+| `CLI_AGENT_HTTP_BEARER_TOKEN` | unset | Optional bearer token required by the HTTP API when set. |
 
 ---
 
@@ -395,5 +396,8 @@ npm install
 npm run dev
 ```
 
-Set `NEXT_PUBLIC_BACKEND_URL` in Vercel to the externally reachable Python HTTP API URL, and use
-`frontend/` as the Vercel project root.
+The frontend defaults to a same-origin proxy at `/api/backend`. For a Vercel demo, set
+`CLI_AGENT_BACKEND_URL` to the externally reachable Python HTTP API URL, such as an ngrok URL, and
+set `CLI_AGENT_BACKEND_BEARER_TOKEN` to match `CLI_AGENT_HTTP_BEARER_TOKEN` when the Python API token
+is enabled. Leave `NEXT_PUBLIC_BACKEND_URL` unset unless you intentionally want browser-direct API
+requests. Use `frontend/` as the Vercel project root.

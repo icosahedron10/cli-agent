@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import hmac
 import json
 import mimetypes
 import os
@@ -43,6 +44,7 @@ class ApiState:
     controller: Any
     approved_sources: ApprovedSourceService
     cors_origin: str = "*"
+    bearer_token: str | None = None
     jobs: dict[str, ApiJob] = field(default_factory=dict)
     jobs_lock: threading.Lock = field(default_factory=threading.Lock)
 
@@ -62,6 +64,7 @@ def build_api_state(cors_origin: str | None = None) -> ApiState:
         controller=controller,
         approved_sources=approved_sources,
         cors_origin=cors_origin or os.getenv("CLI_AGENT_HTTP_CORS_ORIGIN", "*"),
+        bearer_token=os.getenv("CLI_AGENT_HTTP_BEARER_TOKEN") or None,
     )
 
 
@@ -89,6 +92,8 @@ class CliAgentRequestHandler(BaseHTTPRequestHandler):
             if path == "/health":
                 self._send_json({"status": "ok"})
                 return
+            if _is_protected_path(path):
+                _require_authorized(self)
             if path == "/sources":
                 self._send_json({"sources": _source_payloads(_state(self).approved_sources)})
                 return
@@ -110,6 +115,7 @@ class CliAgentRequestHandler(BaseHTTPRequestHandler):
             path = parsed.path.rstrip("/") or "/"
             if path != "/chat":
                 raise ApiError(HTTPStatus.NOT_FOUND, "Unknown endpoint")
+            _require_authorized(self)
             payload = self._read_json()
             history = payload.get("messages", [])
             prompt = payload.get("prompt")
@@ -189,7 +195,7 @@ class CliAgentRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", content_type)
         self.send_header("Access-Control-Allow-Origin", state.cors_origin)
         self.send_header("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
         self.send_header("Vary", "Origin")
 
 
@@ -203,6 +209,19 @@ def _path_part(path: str, index: int) -> str:
         return parts[index]
     except IndexError as exc:
         raise ApiError(HTTPStatus.NOT_FOUND, "Malformed path") from exc
+
+
+def _is_protected_path(path: str) -> bool:
+    return path == "/sources" or path.startswith("/runs/") or path.startswith("/artifacts/")
+
+
+def _require_authorized(handler: BaseHTTPRequestHandler) -> None:
+    token = _state(handler).bearer_token
+    if token is None:
+        return
+    authorization = handler.headers.get("Authorization", "")
+    if not hmac.compare_digest(authorization, f"Bearer {token}"):
+        raise ApiError(HTTPStatus.UNAUTHORIZED, "Missing or invalid bearer token")
 
 
 def _source_payloads(approved_sources: ApprovedSourceService) -> list[dict[str, Any]]:

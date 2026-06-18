@@ -30,7 +30,12 @@ from fakes import FakeChatClient, FakeRunner
 from helpers import tool_call
 
 
-def build_state(app_settings, fake_client: FakeChatClient, fake_runner: FakeRunner) -> ApiState:
+def build_state(
+    app_settings,
+    fake_client: FakeChatClient,
+    fake_runner: FakeRunner,
+    bearer_token: str | None = None,
+) -> ApiState:
     approved_sources = ApprovedSourceService(app_settings)
     manager = ToolManager(
         approved_sources=approved_sources,
@@ -46,6 +51,7 @@ def build_state(app_settings, fake_client: FakeChatClient, fake_runner: FakeRunn
         controller=controller,
         approved_sources=approved_sources,
         cors_origin="http://frontend.test",
+        bearer_token=bearer_token,
     )
 
 
@@ -79,6 +85,37 @@ def post_json(url: str, payload: dict[str, Any]) -> dict[str, Any]:
     )
     with urlopen(request, timeout=5) as response:
         return json.loads(response.read().decode("utf-8"))
+
+
+def get_json_with_token(url: str, token: str | None) -> dict[str, Any]:
+    request = Request(url, method="GET")
+    if token is not None:
+        request.add_header("Authorization", f"Bearer {token}")
+    with urlopen(request, timeout=5) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def post_json_with_token(url: str, payload: dict[str, Any], token: str | None) -> dict[str, Any]:
+    request = Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    if token is not None:
+        request.add_header("Authorization", f"Bearer {token}")
+    with urlopen(request, timeout=5) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def wait_for_complete_with_token(base_url: str, request_id: str, token: str) -> dict[str, Any]:
+    deadline = time.time() + 5
+    while time.time() < deadline:
+        payload = get_json_with_token(f"{base_url}/runs/{request_id}/events", token)
+        if payload["status"] != "running":
+            return payload
+        time.sleep(0.05)
+    raise AssertionError("chat job did not complete")
 
 
 def wait_for_complete(base_url: str, request_id: str) -> dict[str, Any]:
@@ -240,3 +277,72 @@ def test_chat_endpoint_rejects_bad_request(app_settings) -> None:
             post_json(f"{base_url}/chat", {"messages": "bad", "prompt": ""})
 
     assert exc_info.value.code == 400
+
+
+def test_health_endpoint_does_not_require_bearer_token(app_settings) -> None:
+    state = build_state(app_settings, FakeChatClient([]), FakeRunner(), bearer_token="demo-token")
+
+    with api_server(state) as base_url:
+        payload = get_json(f"{base_url}/health")
+
+    assert payload == {"status": "ok"}
+
+
+def test_bearer_token_protects_sources_endpoint(app_settings) -> None:
+    state = build_state(app_settings, FakeChatClient([]), FakeRunner(), bearer_token="demo-token")
+
+    with api_server(state) as base_url:
+        with pytest.raises(HTTPError) as missing_exc:
+            get_json(f"{base_url}/sources")
+        with pytest.raises(HTTPError) as invalid_exc:
+            get_json_with_token(f"{base_url}/sources", "wrong-token")
+        payload = get_json_with_token(f"{base_url}/sources", "demo-token")
+
+    assert missing_exc.value.code == 401
+    assert invalid_exc.value.code == 401
+    assert payload["sources"][0]["path"] == "sample_sources/dnd5e_hp_reference.md"
+
+
+def test_bearer_token_protects_chat_run_events_and_artifacts(app_settings) -> None:
+    fake_client = FakeChatClient(
+        [
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    tool_call(
+                        API_TOOL_AUTO_ANALYSIS,
+                        {
+                            "question": "Use fixed HP. Calculate HP for a level 11 paladin.",
+                            "source_paths": ["sample_sources/dnd5e_hp_reference.md"],
+                        },
+                    )
+                ],
+            },
+            {"role": "assistant", "content": "Done."},
+        ]
+    )
+    state = build_state(app_settings, fake_client, FakeRunner("auto_analysis_success"), bearer_token="demo-token")
+
+    with api_server(state) as base_url:
+        with pytest.raises(HTTPError) as chat_exc:
+            post_json(f"{base_url}/chat", {"messages": [], "prompt": "Calculate HP."})
+        started = post_json_with_token(f"{base_url}/chat", {"messages": [], "prompt": "Calculate HP."}, "demo-token")
+
+        with pytest.raises(HTTPError) as events_exc:
+            get_json(f"{base_url}{started['events_url']}")
+        completed = wait_for_complete_with_token(base_url, started["request_id"], "demo-token")
+
+        artifact = completed["result"]["tool_envelopes"][0]["artifacts"][0]
+        with pytest.raises(HTTPError) as artifact_exc:
+            urlopen(f"{base_url}{artifact['url']}", timeout=5)
+        artifact_request = Request(f"{base_url}{artifact['url']}", method="GET")
+        artifact_request.add_header("Authorization", "Bearer demo-token")
+        with urlopen(artifact_request, timeout=5) as response:
+            body = response.read().decode("utf-8")
+
+    assert chat_exc.value.code == 401
+    assert events_exc.value.code == 401
+    assert artifact_exc.value.code == 401
+    assert completed["status"] == "complete"
+    assert "level,hp" in body

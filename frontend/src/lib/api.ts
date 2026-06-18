@@ -5,7 +5,7 @@ import type {
   StartChatResponse,
 } from "./types";
 
-const DEFAULT_BACKEND_URL = "http://localhost:8765";
+const DEFAULT_BACKEND_URL = "/api/backend";
 const API_REQUEST_TIMEOUT_MS = 30_000;
 
 export function backendUrl(path = "") {

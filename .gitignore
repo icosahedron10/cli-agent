@@ -3,9 +3,12 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .venv/
+.env
 *.pyc
 *.log
+*.tsbuildinfo
 python-agent-runs/
 5e PHB/
 .streamlit/secrets.toml
 settings/*.local.json
+frontend/.env*.local
