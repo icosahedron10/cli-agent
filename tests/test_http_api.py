@@ -190,6 +190,20 @@ def test_artifact_route_rejects_path_escape(app_settings) -> None:
     assert exc_info.value.code == 403
 
 
+def test_artifact_route_rejects_encoded_run_id_escape(app_settings) -> None:
+    outside_run_root = app_settings.runs_root.parent / "escaped-run"
+    outside_run_root.mkdir(parents=True)
+    (outside_run_root / "secret.txt").write_text("private", encoding="utf-8")
+    state = build_state(app_settings, FakeChatClient([]), FakeRunner())
+    escape_id = _encode_file_id("secret.txt")
+
+    with api_server(state) as base_url:
+        with pytest.raises(HTTPError) as exc_info:
+            urlopen(f"{base_url}/artifacts/..%2Fescaped-run/{escape_id}", timeout=5)
+
+    assert exc_info.value.code == 403
+
+
 def test_chat_endpoint_rejects_bad_request(app_settings) -> None:
     state = build_state(app_settings, FakeChatClient([]), FakeRunner())
 
