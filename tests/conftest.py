@@ -52,7 +52,7 @@ def app_settings(tmp_path: Path) -> AppSettings:
         max_sources_per_run=4,
         max_source_bytes=32 * 1024 * 1024,
         max_total_source_bytes_per_run=64 * 1024 * 1024,
-        copilot_provider_base_url="http://host.docker.internal:11434",
+        copilot_provider_base_url="http://host.docker.internal:8000/v1",
         copilot_model="test-copilot-model",
         copilot_provider_api_key=None,
         copilot_offline=True,

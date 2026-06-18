@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from cli_agent.constants import API_TOOL_AUTO_ANALYSIS, API_TOOL_SOURCE_SEARCH
+from cli_agent.constants import API_TOOL_AUTO_ANALYSIS, API_TOOL_SOURCE_SEARCH, MAX_ANALYSIS_GOAL_LENGTH
 
 
 def build_tool_schemas(approved_source_paths: list[str], max_sources_per_run: int | None = None) -> list[dict]:
@@ -65,7 +65,10 @@ def build_tool_schemas(approved_source_paths: list[str], max_sources_per_run: in
                         "source_paths": source_paths_schema,
                         "analysis_goal": {
                             "type": "string",
-                            "description": "Short statement of the calculation or analysis output expected.",
+                            "maxLength": MAX_ANALYSIS_GOAL_LENGTH,
+                            "description": (
+                                "Short single-line statement of the calculation or analysis output expected."
+                            ),
                         },
                     },
                     "required": ["question", "source_paths"],

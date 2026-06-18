@@ -12,7 +12,18 @@ class DockerRunner:
         self._worker_slots = threading.BoundedSemaphore(settings.max_concurrent_worker_runs)
 
     def build_command(self, run_paths: RunPaths, prompt: str) -> list[str]:
-        command = ["docker", "run", "--rm"]
+        command = [
+            "docker",
+            "run",
+            "--rm",
+            "--init",
+            "--cap-drop=ALL",
+            "--security-opt=no-new-privileges",
+            "--read-only",
+            "--tmpfs",
+            "/tmp:rw,nosuid,nodev,size=64m",
+            "--pids-limit=256",
+        ]
         if self._settings.docker_network:
             command.extend(["--network", self._settings.docker_network])
 
@@ -88,6 +99,9 @@ def _docker_env_args(settings: AppSettings) -> list[str]:
         "COPILOT_OFFLINE": "true" if settings.copilot_offline else "false",
         "COPILOT_PROVIDER_BASE_URL": settings.copilot_provider_base_url,
         "COPILOT_MODEL": settings.copilot_model,
+        "HOME": "/workspace/work/home",
+        "XDG_CACHE_HOME": "/workspace/work/cache",
+        "XDG_CONFIG_HOME": "/workspace/work/config",
         "COPILOT_HOME": "/workspace/work/copilot-home",
         "COPILOT_CACHE_HOME": "/workspace/work/copilot-cache",
         "COPILOT_AUTO_UPDATE": "false",
