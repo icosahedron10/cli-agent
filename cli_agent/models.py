@@ -38,6 +38,7 @@ class AppSettings:
     chat_model: str
     chat_temperature: float
     chat_timeout_seconds: float
+    max_api_jobs: int
     worker_image: str
     worker_timeout_seconds: int
     worker_queue_timeout_seconds: float

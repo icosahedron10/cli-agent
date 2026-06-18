@@ -45,6 +45,7 @@ def app_settings(tmp_path: Path) -> AppSettings:
         chat_model="test-model",
         chat_temperature=0.0,
         chat_timeout_seconds=120.0,
+        max_api_jobs=100,
         worker_image="cli-agent-worker:test",
         worker_timeout_seconds=30,
         worker_queue_timeout_seconds=30.0,

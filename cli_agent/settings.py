@@ -35,6 +35,7 @@ def load_app_settings(repo_root: Path | None = None) -> AppSettings:
     max_total_source_bytes_per_run = _read_int_env("CLI_AGENT_MAX_TOTAL_SOURCE_BYTES_PER_RUN", 64 * 1024 * 1024)
     chat_temperature = _read_float_env("CLI_AGENT_CHAT_TEMPERATURE", 0.0)
     chat_timeout_seconds = _read_positive_float_env("CLI_AGENT_CHAT_TIMEOUT_SECONDS", 120.0)
+    max_api_jobs = _read_int_env("CLI_AGENT_MAX_API_JOBS", 100)
 
     chat_base_url = os.getenv("CLI_AGENT_CHAT_BASE_URL", DEFAULT_CHAT_BASE_URL).rstrip("/")
     chat_model = os.getenv("CLI_AGENT_CHAT_MODEL", DEFAULT_CHAT_MODEL)
@@ -50,6 +51,7 @@ def load_app_settings(repo_root: Path | None = None) -> AppSettings:
         chat_model=chat_model,
         chat_temperature=chat_temperature,
         chat_timeout_seconds=chat_timeout_seconds,
+        max_api_jobs=max_api_jobs,
         worker_image=os.getenv("CLI_AGENT_WORKER_IMAGE", "cli-agent-worker:local"),
         worker_timeout_seconds=worker_timeout_seconds,
         worker_queue_timeout_seconds=worker_queue_timeout_seconds,

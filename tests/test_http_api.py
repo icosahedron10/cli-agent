@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import time
 from contextlib import contextmanager
+from dataclasses import replace
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -141,6 +142,33 @@ def test_chat_endpoint_returns_sanitized_completed_result(app_settings) -> None:
     assert tool_messages
     decoded_tool_content = json.loads(tool_messages[0]["content"])
     assert decoded_tool_content["artifacts"][0]["url"].startswith("/artifacts/")
+
+
+def test_chat_jobs_evict_old_completed_entries(app_settings) -> None:
+    capped_settings = replace(app_settings, max_api_jobs=2)
+    fake_client = FakeChatClient(
+        [
+            {"role": "assistant", "content": "Done 1."},
+            {"role": "assistant", "content": "Done 2."},
+            {"role": "assistant", "content": "Done 3."},
+        ]
+    )
+    state = build_state(capped_settings, fake_client, FakeRunner())
+
+    with api_server(state) as base_url:
+        started = []
+        completed = []
+        for index in range(3):
+            started.append(post_json(f"{base_url}/chat", {"messages": [], "prompt": f"Prompt {index}"}))
+            completed.append(wait_for_complete(base_url, started[-1]["request_id"]))
+        with pytest.raises(HTTPError) as exc_info:
+            get_json(f"{base_url}/runs/{started[0]['request_id']}/events")
+        newest = get_json(f"{base_url}/runs/{started[-1]['request_id']}/events")
+
+    assert [item["status"] for item in completed] == ["complete", "complete", "complete"]
+    assert exc_info.value.code == 404
+    assert newest["status"] == "complete"
+    assert len(state.jobs) == 2
 
 
 def test_artifact_route_serves_validated_file(app_settings) -> None:

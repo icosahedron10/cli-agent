@@ -24,6 +24,7 @@ from cli_agent.settings import load_app_settings
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
 MAX_REQUEST_BYTES = 1_000_000
+TERMINAL_JOB_STATUSES = {"complete", "error"}
 
 
 @dataclass
@@ -219,6 +220,7 @@ def _source_payloads(approved_sources: ApprovedSourceService) -> list[dict[str, 
 def _start_chat_job(state: ApiState, history: list[dict[str, Any]], prompt: str) -> ApiJob:
     job = ApiJob(request_id=f"chat-{uuid.uuid4().hex[:12]}")
     with state.jobs_lock:
+        _evict_jobs_locked(state, max(0, state.settings.max_api_jobs - 1))
         state.jobs[job.request_id] = job
 
     worker = threading.Thread(
@@ -244,6 +246,36 @@ def _run_chat_job(state: ApiState, job: ApiJob, history: list[dict[str, Any]], p
         with job.timing_lock:
             job.error = str(exc)
             job.status = "error"
+    finally:
+        _evict_jobs(state, protected_request_id=job.request_id)
+
+
+def _evict_jobs(state: ApiState, protected_request_id: str | None = None) -> None:
+    with state.jobs_lock:
+        _evict_jobs_locked(state, state.settings.max_api_jobs, protected_request_id)
+
+
+def _evict_jobs_locked(
+    state: ApiState,
+    target_count: int,
+    protected_request_id: str | None = None,
+) -> None:
+    if len(state.jobs) <= target_count:
+        return
+    for request_id, job in list(state.jobs.items()):
+        if len(state.jobs) <= target_count:
+            return
+        if request_id == protected_request_id:
+            continue
+        with job.timing_lock:
+            status = job.status
+        if status in TERMINAL_JOB_STATUSES:
+            state.jobs.pop(request_id, None)
+    for request_id in list(state.jobs):
+        if len(state.jobs) <= target_count:
+            return
+        if request_id != protected_request_id:
+            state.jobs.pop(request_id, None)
 
 
 def _record_progress_event(

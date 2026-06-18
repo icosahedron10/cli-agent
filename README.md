@@ -311,6 +311,7 @@ place before exposing the tool to sustained traffic.
 | `CLI_AGENT_CHAT_API_KEY` | `not-needed` | Bearer token for bundled chat-controller paths. |
 | `CLI_AGENT_CHAT_TEMPERATURE` | `0.0` | Temperature for bundled chat-controller completions. |
 | `CLI_AGENT_CHAT_TIMEOUT_SECONDS` | `120` | Maximum wait for each bundled chat-controller completion call. |
+| `CLI_AGENT_MAX_API_JOBS` | `100` | Maximum retained HTTP chat jobs. |
 
 ---
 

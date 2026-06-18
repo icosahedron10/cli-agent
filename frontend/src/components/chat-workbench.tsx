@@ -8,6 +8,9 @@ import remarkGfm from "remark-gfm";
 import { backendUrl, fetchRunEvents, fetchSources, fetchText, startChat } from "@/lib/api";
 import type { ChatMessage, FileRef, SourceEntry, TimingRow, ToolCall, ToolPayload } from "@/lib/types";
 
+const POLL_INTERVAL_MS = 700;
+const RUN_POLL_TIMEOUT_MS = 10 * 60 * 1000;
+
 const STARTERS = [
   {
     label: "source-search: 0 HP combat rule",
@@ -84,11 +87,20 @@ export function ChatWorkbench() {
   }
 
   async function pollRun(eventsUrl: string) {
+    const startedAt = Date.now();
     for (;;) {
+      const elapsedMs = Date.now() - startedAt;
+      if (elapsedMs >= RUN_POLL_TIMEOUT_MS) {
+        throw new Error("Backend run timed out. You can send another prompt.");
+      }
       const eventPayload = await fetchRunEvents(eventsUrl);
       setTimings(eventPayload.timings);
       if (eventPayload.status === "running") {
-        await wait(700);
+        const remainingMs = RUN_POLL_TIMEOUT_MS - (Date.now() - startedAt);
+        if (remainingMs <= 0) {
+          throw new Error("Backend run timed out. You can send another prompt.");
+        }
+        await wait(Math.min(POLL_INTERVAL_MS, remainingMs));
         continue;
       }
       if (eventPayload.status === "complete" && eventPayload.result) {

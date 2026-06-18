@@ -6,6 +6,7 @@ import type {
 } from "./types";
 
 const DEFAULT_BACKEND_URL = "http://localhost:8765";
+const API_REQUEST_TIMEOUT_MS = 30_000;
 
 export function backendUrl(path = "") {
   const base = (process.env.NEXT_PUBLIC_BACKEND_URL || DEFAULT_BACKEND_URL).replace(/\/$/, "");
@@ -32,7 +33,7 @@ export async function fetchRunEvents(eventsUrl: string): Promise<RunEventsRespon
 }
 
 export async function fetchText(path: string): Promise<string> {
-  const response = await fetch(backendUrl(path));
+  const response = await fetchBackend(path);
   if (!response.ok) {
     throw new Error(await responseError(response));
   }
@@ -40,7 +41,7 @@ export async function fetchText(path: string): Promise<string> {
 }
 
 async function fetchJson<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(backendUrl(path), {
+  const response = await fetchBackend(path, {
     ...init,
     headers: {
       "Content-Type": "application/json",
@@ -51,6 +52,28 @@ async function fetchJson<T>(path: string, init: RequestInit = {}): Promise<T> {
     throw new Error(await responseError(response));
   }
   return response.json() as Promise<T>;
+}
+
+async function fetchBackend(path: string, init: RequestInit = {}): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), API_REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(backendUrl(path), {
+      ...init,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw new Error("Backend request timed out");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
 }
 
 async function responseError(response: Response): Promise<string> {
