@@ -20,7 +20,7 @@ const STARTERS = [
   {
     label: "auto-analysis: equipment totals",
     prompt:
-      'Use auto_analysis with source_paths ["5e PHB/chapters/05 - Chapter 5 - Equipment.pdf"] to calculate the total gp cost and total weight for this equipment loadout: chain mail, shield, longsword, and 2 handaxes. Include a short table and cite the source.',
+      'Use auto_analysis with source_paths ["5e PHB/chapters/05 - Chapter 5 - Equipment.pdf"] to calculate the total gp cost and total weight for this equipment loadout: chain mail, shield, longsword, and 2 handaxes. Create a pair of stacked bar chart PNG artifacts: one for gp cost by item and one for weight by item. Include a short table and cite the source.',
   },
 ];
 
@@ -282,6 +282,9 @@ function ToolResultPanel({
   payload: ToolPayload;
   onPreviewTrace: (file: FileRef) => void;
 }) {
+  const reasoningTraces = payload.traces.filter(isReasoningTrace);
+  const diagnosticTraces = payload.traces.filter((file) => !isReasoningTrace(file));
+
   return (
     <details className="detail-panel" open>
       <summary>Tool result: {payload.status} ({payload.run_id || "pre-run"})</summary>
@@ -289,7 +292,12 @@ function ToolResultPanel({
       {payload.needs_clarification ? <div className="warning-box">{payload.needs_clarification.question}</div> : null}
       {payload.error ? <div className="error-box">{payload.error}</div> : null}
       {payload.artifacts.length ? <FileList title="Artifacts" files={payload.artifacts} /> : null}
-      {payload.traces.length ? <TraceList files={payload.traces} onPreviewTrace={onPreviewTrace} /> : null}
+      {reasoningTraces.length ? (
+        <TraceList title="Model reasoning traces" files={reasoningTraces} onPreviewTrace={onPreviewTrace} />
+      ) : null}
+      {diagnosticTraces.length ? (
+        <TraceList title="Trace files" files={diagnosticTraces} onPreviewTrace={onPreviewTrace} />
+      ) : null}
     </details>
   );
 }
@@ -316,15 +324,17 @@ function FileList({ title, files }: { title: string; files: FileRef[] }) {
 }
 
 function TraceList({
+  title,
   files,
   onPreviewTrace,
 }: {
+  title: string;
   files: FileRef[];
   onPreviewTrace: (file: FileRef) => void;
 }) {
   return (
     <div className="file-group">
-      <h4>Trace files</h4>
+      <h4>{title}</h4>
       <div className="file-list">
         {files.map((file) => (
           <div className="file-row" key={file.id}>
@@ -395,6 +405,11 @@ function collectToolPayloads(messages: ChatMessage[]) {
       return [];
     }
   });
+}
+
+function isReasoningTrace(file: FileRef) {
+  const name = file.name.toLowerCase();
+  return name === "events.jsonl" || name === "worker_prompt.md";
 }
 
 function parseJsonMaybe(text: string): unknown | null {
